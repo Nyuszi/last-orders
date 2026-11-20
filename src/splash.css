@@ -1,0 +1,48 @@
+/* The inline post: a launch card. The game itself opens in Reddit's expanded view. */
+:root {
+  color-scheme: dark;
+  --bg: #1d110b; --card: #3a2518; --line: #5a3a24; --ink: #1a0f0a;
+  --cream: #f3e6cc; --muted: #cdb894; --brass: #d9a441; --brass-light: #f6dc8f; --amber: #f2b53a;
+  --head: 'Silkscreen', 'Pixelify Sans', monospace;
+  --body: 'Pixelify Sans', 'Silkscreen', monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--cream); font-family: var(--body); }
+body {
+  background:
+    repeating-linear-gradient(90deg, #00000022 0 2px, transparent 2px 46px),
+    linear-gradient(180deg, #2b1a12, #1d110b);
+}
+.splash {
+  height: 100dvh; display: flex; align-items: center; justify-content: center; gap: 24px;
+  padding: 16px; cursor: pointer;
+}
+.who {
+  height: auto; width: auto; max-height: min(78vh, 340px); max-width: 44vw; min-width: 0; flex: 0 1 auto;
+  image-rendering: pixelated;
+  filter: drop-shadow(4px 4px 0 #000a);
+}
+.who:not([src]) { display: none; }
+.text { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; flex: 0 1 360px; min-width: 0; }
+.brand {
+  margin: 0; font-family: var(--head); font-weight: 700; font-size: clamp(22px, 4.6vw, 40px); white-space: nowrap;
+  color: var(--brass-light); text-shadow: 3px 3px 0 var(--ink); letter-spacing: 0.02em;
+}
+.night { margin: 0; font-family: var(--head); font-size: 13px; color: var(--amber); }
+.blurb { margin: 0 0 6px; font-size: 17px; font-weight: 700; line-height: 1.25; }
+.play {
+  font: inherit; font-family: var(--head); font-weight: 700; font-size: 18px; cursor: pointer;
+  padding: 14px 22px; background: var(--brass); color: var(--ink);
+  border: 3px solid var(--ink);
+  box-shadow: inset -3px -3px 0 #00000055, inset 3px 3px 0 #ffffff33, 3px 3px 0 var(--ink);
+}
+.play:hover { background: var(--amber); }
+.play:active { box-shadow: inset 3px 3px 0 #00000055; transform: translate(2px, 2px); }
+.play:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+.stats { margin: 0; font-size: 13px; color: var(--muted); min-height: 1.3em; }
+
+@media (max-width: 520px) {
+  .splash { flex-direction: column; gap: 10px; text-align: center; }
+  .text { align-items: center; }
+  .who { height: min(34vh, 200px); }
+}

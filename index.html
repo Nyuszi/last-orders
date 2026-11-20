@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Last Orders</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<main id="app">
+  <header class="top">
+    <div>
+      <h1 class="brand">LAST ORDERS</h1>
+      <p class="sub" id="sub">NIGHT 1 · THE COPPER SPUR</p>
+    </div>
+    <nav class="nights" aria-label="Nights" id="nights"></nav>
+  </header>
+
+  <section class="brief" aria-live="polite">
+    <p class="label"><span class="label-main">TONIGHT'S ORDERS <span class="try-tag" id="try-tag">TRY 1</span> <span class="help-tag" id="help-tag" hidden>USED HELP</span></span> <span id="par"></span></p>
+    <p class="blurb" id="blurb"></p>
+    <ul class="chips" id="chips"></ul>
+  </section>
+
+  <div class="stage" id="stage">
+    <div class="power" id="power" role="meter" aria-label="Pour strength" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <span class="power-label">PULL</span>
+      <div class="power-track">
+        <div class="power-meter" id="power-meter"></div>
+        <div class="power-grip" id="power-grip" aria-hidden="true"></div>
+      </div>
+      <span class="power-label">HARD</span>
+      <span class="power-val" id="power-val">0%</span>
+    </div>
+    <div class="board" id="board">
+      <p class="hint" id="hint" aria-live="polite"></p>
+      <div class="coach" id="coach" aria-live="polite" hidden></div>
+      <div class="tip" id="tip" role="tooltip" hidden></div>
+      <div class="cutin" id="cutin" hidden>
+        <div class="cutin-band">
+          <img id="cutin-img" alt="">
+          <p class="cutin-bubble"><span id="cutin-name"></span><strong id="cutin-line"></strong></p>
+        </div>
+      </div>
+      <canvas id="game" aria-label="The bar, seen from above. Drag back anywhere and release to slide the drink to the customer."></canvas>
+    </div>
+  </div>
+
+  <section class="controls">
+    <div class="pours">
+      <span class="small-label">POURS</span>
+      <div class="bottles" aria-label="Pours left" id="bottles"></div>
+      <p class="tips"><span class="small-label">TIPS</span> <span id="tips">0c</span></p>
+    </div>
+    <p class="keys" aria-label="Keyboard controls"><kbd>Q</kbd><kbd>E</kbd> aim · hold <kbd>Space</kbd> to pull, release to pour · <kbd>Shift</kbd> fine aim</p>
+    <div class="spin">
+      <canvas id="spinpad" width="28" height="28" aria-label="Spin: tap the glass where you want to hit it. Left of centre curves left, right of centre curves right."></canvas>
+      <div class="spin-text">
+        <span class="small-label">SPIN</span>
+        <span class="spin-val" id="spin-val">NONE</span>
+        <button type="button" class="spin-reset" id="spin-reset">Centre</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="result" id="result" hidden>
+    <div class="card" role="dialog" aria-modal="true" aria-labelledby="r-title">
+      <p class="label" id="r-night"></p>
+      <h2 id="r-title"></h2>
+      <p class="r-sub" id="r-sub"></p>
+      <ul class="badges" id="r-badges"></ul>
+      <pre class="share" id="r-share"></pre>
+      <p class="r-stats" id="r-stats" hidden></p>
+      <div class="r-actions">
+        <button type="button" class="primary" id="r-post" hidden>Share in comments</button>
+        <button type="button" class="primary" id="r-copy">Copy result</button>
+        <button type="button" id="r-replay">Watch replay</button>
+        <button type="button" id="r-retry">Play again <kbd class="key-hint">Space</kbd></button>
+        <button type="button" id="r-next">Next night</button>
+        <button type="button" class="help" id="r-help">Show me how</button>
+      </div>
+    </div>
+  </div>
+</main>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

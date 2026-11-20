@@ -1,0 +1,856 @@
+import { LEVELS, NPCS, type Level, type NpcId } from './levels';
+import { Renderer, W, H, type Aim } from './render';
+import { Sim, STEP_MS, pointInPoly, type Shot, type Status } from './sim';
+import { SOLUTIONS } from './solutions';
+import { fetchNight, requestedDate } from './daily';
+import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';
+import sheriffAngry from './assets/portraits/sheriff-angry.webp?inline';
+import dutchAny from './assets/portraits/dutch-any.webp?inline';
+import twofistAny from './assets/portraits/twofist-any.webp?inline';
+import laviniaAny from './assets/portraits/lavinia-any.webp?inline';
+import peteAny from './assets/portraits/pete-any.webp?inline';
+import sheriffHappy from './assets/portraits/sheriff-happy.webp?inline';
+import sheriffSurprised from './assets/portraits/sheriff-surprised.webp?inline';
+import sheriffSly from './assets/portraits/sheriff-sly.webp?inline';
+import dutchAngry from './assets/portraits/dutch-angry.webp?inline';
+import dutchSurprised from './assets/portraits/dutch-surprised.webp?inline';
+import peteAngry from './assets/portraits/pete-angry.webp?inline';
+import peteHappy from './assets/portraits/pete-happy.webp?inline';
+import peteSurprised from './assets/portraits/pete-surprised.webp?inline';
+
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const canvas = $<HTMLCanvasElement>('game');
+const board = $('board');
+const renderer = new Renderer(canvas);
+
+const DRINK_COLOR: Record<string, string> = { beer: '#e8b24a', rye: '#b5652c', whiskey: '#c77b2e', sarsaparilla: '#5a2c17', water: '#bfe0ea' };
+
+let levelIndex = 0;
+/** Tonight's daily night first (once loaded), then the handmade practice nights. */
+const NIGHTS: Level[] = [...LEVELS];
+let dailyLoaded = false;
+let reportedTry = '';
+/** Tonight's night (not a practice night). Only these count towards stats and streaks. */
+const isDaily = () => dailyLoaded && levelIndex === 0;
+let sim: Sim;
+let mode: 'play' | 'replay' = 'play';
+let replayShots: Shot[] = [];
+let recorded: Shot[] = [];
+let aim: Aim | null = null;
+let drag: { x0: number; y0: number } | null = null;
+let acc = 0;
+let last = performance.now();
+let lastStatus: Status = 'aiming';
+let resultTimer = 0;
+let shownHint = '';
+let hintTimer = 0;
+let replayKind: 'REPLAY' | 'SOLUTION' = 'REPLAY';
+// After release a small direction arrow rides ahead of the drink for about half a second.
+// (There used to be a slow-motion start here. Handing back to full speed made the drink look
+// like it sped up mid-slide, so the clock now always runs at real speed: a pour starts fast
+// and only ever slows down.)
+const SLOW_STEPS = 30;
+const EASE_STEPS = 14;
+let slowSteps = 0;
+
+// ---------------- Today's progress: tries and help, per night ----------------
+// Kept per day (UTC, like the daily map), so yesterday's help or tries never follow you.
+// On this device only for now; on Reddit it moves to the server, keyed by player and day.
+interface NightProgress { tries: number; help: boolean; solvedOnTry: number }
+const PROGRESS_KEY = 'last-orders-progress';
+const today = new Date().toISOString().slice(0, 10);
+let progress: { date: string; nights: Record<string, NightProgress> } = { date: today, nights: {} };
+try {
+  localStorage.removeItem('last-orders-help-used'); // the old, never-expiring help flag
+  const saved = JSON.parse(localStorage.getItem(PROGRESS_KEY) ?? 'null');
+  if (saved && saved.date === today && saved.nights) progress = saved;
+} catch { /* storage unavailable: start fresh */ }
+function night(id: string): NightProgress {
+  return (progress.nights[id] ??= { tries: 0, help: false, solvedOnTry: 0 });
+}
+function saveProgress() {
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch { /* storage unavailable */ }
+}
+const helpUsed = { has: (id: string) => night(id).help };
+function markHelpUsed(id: string) { night(id).help = true; saveProgress(); }
+/** A try starts when the first drink of a fresh night is poured (switching nights doesn't count). */
+function countTryIfFirstPour() {
+  if (mode !== 'play' || sim.shots.length !== 1) return;
+  night(sim.level.id).tries++;
+  if (isDaily()) journey.start();
+  saveProgress();
+  updateHud();
+}
+/** The try you're on: the last one counted, or the next one if you haven't poured yet. */
+function currentTry(id: string) {
+  const n = night(id);
+  return sim && sim.level.id === id && mode === 'play' && sim.shots.length === 0 ? n.tries + 1 : Math.max(1, n.tries);
+}
+/** Bragging line for a finished night; a plain count for one you didn't finish. */
+function triesText(t: number, won = true) { return won ? (t === 1 ? 'First try' : `Took ${t} tries`) : `Try ${t}`; }
+
+// ---------------- Power meter (side bar) ----------------
+const CELLS = 12;
+const meter = $('power-meter');
+for (let i = 0; i < CELLS; i++) {
+  const cell = document.createElement('i');
+  // Green for a gentle slide, amber in the middle, red when you really shove it.
+  const t = i / (CELLS - 1);
+  cell.style.setProperty('--cell', t < 0.45 ? '#6dbb4a' : t < 0.8 ? '#f2b53a' : '#e8664a');
+  meter.appendChild(cell);
+}
+function showPower(power: number, resting: boolean) {
+  const on = Math.round(power * CELLS);
+  Array.from(meter.children).forEach((c, i) => c.classList.toggle('on', i < on));
+  meter.classList.toggle('resting', resting);
+  $('power-val').textContent = `${Math.round(power * 100)}%`;
+  $('power').setAttribute('aria-valuenow', String(Math.round(power * 100)));
+}
+
+// ---------------- Spin pad: tap the glass where you want to hit it ----------------
+const pad = $<HTMLCanvasElement>('spinpad');
+const pg = pad.getContext('2d')!;
+const PAD = 28, PC = 14, PR = 11;
+let spin = 0;
+let spinY = 0;
+
+function drawPad() {
+  const next = sim ? sim.nextOrder : -1;
+  const drink = next >= 0 ? sim.orders[next].drink : 'beer';
+  pg.fillStyle = '#1a0f0a';
+  pg.fillRect(0, 0, PAD, PAD);
+  const disc = (r: number, col: string) => {
+    pg.fillStyle = col;
+    for (let dy = -r; dy <= r; dy++) {
+      const hw = Math.floor(Math.sqrt((r + 0.5) ** 2 - dy * dy));
+      pg.fillRect(PC - hw, PC + dy, 2 * hw + 1, 1);
+    }
+  };
+  disc(PR + 1, '#5a3a24');
+  disc(PR, '#a9bcbc');
+  disc(PR - 1, DRINK_COLOR[drink]);
+  if (drink === 'beer') disc(PR - 5, '#f6ebd3');
+  pg.fillStyle = '#ffffff';
+  pg.fillRect(PC - 7, PC - 7, 2, 1);
+  // Centre tick marks.
+  pg.fillStyle = '#1a0f0a88';
+  pg.fillRect(PC, PC - PR + 1, 1, 2);
+  pg.fillRect(PC, PC + PR - 2, 1, 2);
+  // The hit point.
+  const mx = Math.round(PC + spin * (PR - 2)), my = Math.round(PC + spinY * (PR - 2));
+  pg.fillStyle = '#1a0f0a';
+  pg.fillRect(mx - 2, my - 2, 5, 5);
+  pg.fillStyle = '#f2b53a';
+  pg.fillRect(mx - 1, my - 1, 3, 3);
+  // Curve arrows show which way the drink will bend.
+  if (spin !== 0) {
+    const dir = Math.sign(spin);
+    pg.fillStyle = '#f3e6cc';
+    const ax = dir > 0 ? PAD - 3 : 2;
+    for (let i = 0; i < 3; i++) pg.fillRect(ax - dir * i, PC - i, 1, 1 + 2 * i);
+  }
+  const amount = Math.round(Math.abs(spin) * 100);
+  $('spin-val').textContent = spin === 0 ? 'NONE' : `${spin < 0 ? 'LEFT' : 'RIGHT'} ${amount}%`;
+}
+
+function setSpinFromPointer(e: PointerEvent) {
+  const r = pad.getBoundingClientRect();
+  let dx = ((e.clientX - r.left) / r.width) * PAD - PC;
+  let dy = ((e.clientY - r.top) / r.height) * PAD - PC;
+  const len = Math.hypot(dx, dy);
+  const max = PR - 2;
+  if (len > max) { dx = (dx / len) * max; dy = (dy / len) * max; }
+  let s = dx / max;
+  if (Math.abs(s) < 0.12) s = 0; // a small dead zone makes "no spin" easy to hit
+  spin = Math.round(s * 20) / 20;
+  spinY = dy / max;
+  drawPad();
+}
+pad.addEventListener('pointerdown', (e) => { pad.setPointerCapture(e.pointerId); setSpinFromPointer(e); });
+pad.addEventListener('pointermove', (e) => { if (e.buttons) setSpinFromPointer(e); });
+pad.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    spin = Math.max(-1, Math.min(1, Math.round((spin + (e.key === 'ArrowLeft' ? -0.1 : 0.1)) * 20) / 20));
+    drawPad();
+    e.preventDefault();
+  }
+});
+pad.tabIndex = 0;
+$('spin-reset').onclick = () => { spin = 0; spinY = 0; drawPad(); };
+
+// ---------------- Levels and HUD ----------------
+function loadLevel(i: number, asReplay = false, kind: 'REPLAY' | 'SOLUTION' = 'REPLAY') {
+  if (replayKind === 'SOLUTION' && mode === 'replay') { spin = savedSpin; drawPad(); }
+  if (asReplay && kind === 'SOLUTION') savedSpin = spin;
+  replayKind = kind;
+  lesson = null;
+  if (document.getElementById('cutin')) { clearTimeout(cutinTimer); cutinEl.hidden = true; }
+  peteSlapShown = false; lastServed = null;
+  aimShown = false; charging = null; charge = 0;
+  if (document.getElementById('power-grip')) placeGrip(0);
+  if (document.getElementById('coach')) hideCoach();
+  if (meter.children.length) showPower(0, true);
+  levelIndex = i;
+  const level = NIGHTS[i];
+  sim = new Sim(level);
+  renderer.reset();
+  mode = asReplay ? 'replay' : 'play';
+  if (!asReplay) recorded = [];
+  lastStatus = 'aiming';
+  aim = null;
+  drag = null;
+  clearTimeout(resultTimer);
+  $('result').hidden = true;
+  $('sub').textContent = `NIGHT ${level.night} · ${level.title.toUpperCase()}`;
+  $('blurb').textContent = level.blurb;
+  $('par').textContent = `${level.pours} POURS`;
+  shownHint = '';
+  const narrow = matchMedia('(max-width: 520px)').matches;
+  setHint(!asReplay ? (narrow ? `${level.blurb} ${level.hint}` : level.hint) : kind === 'SOLUTION' ? "Here's one way to serve everyone. Watch the power and spin." : 'Replaying your night: same numbers per pour, same result.');
+  renderNights();
+  updateHud();
+}
+
+function setHint(text: string) {
+  if (text === shownHint) return;
+  shownHint = text;
+  const el = $('hint');
+  el.textContent = text;
+  el.classList.remove('fade');
+  clearTimeout(hintTimer);
+  hintTimer = window.setTimeout(() => el.classList.add('fade'), 7000);
+}
+
+function renderNights() {
+  const nav = $('nights');
+  nav.innerHTML = '';
+  NIGHTS.forEach((l, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    const daily = dailyLoaded && i === 0;
+    b.textContent = daily ? 'TODAY' : String(dailyLoaded ? i : l.night);
+    if (daily) b.classList.add('today');
+    b.setAttribute('aria-label', daily ? `Tonight: night ${l.night}, ${l.title}` : `Practice night ${l.night}: ${l.title}`);
+    if (i === levelIndex) b.setAttribute('aria-current', 'true');
+    b.onclick = () => loadLevel(i);
+    nav.appendChild(b);
+  });
+}
+
+function pixelGlass(fill: string) {
+  // 9x11 pixel glass, drawn as rects so it stays crisp.
+  return `<svg width="18" height="22" viewBox="0 0 9 11" shape-rendering="crispEdges" aria-hidden="true">
+    <rect x="0" y="0" width="9" height="1" fill="#1a0f0a"/><rect x="0" y="0" width="1" height="11" fill="#1a0f0a"/><rect x="8" y="0" width="1" height="11" fill="#1a0f0a"/><rect x="0" y="10" width="9" height="1" fill="#1a0f0a"/>
+    <rect x="1" y="1" width="7" height="9" fill="#a9bcbc"/><rect x="2" y="3" width="5" height="6" fill="${fill}"/><rect x="2" y="2" width="1" height="1" fill="#ffffff"/></svg>`;
+}
+
+function updateHud() {
+  const level: Level = sim.level;
+  const chips = $('chips');
+  chips.innerHTML = '';
+  const add = (text: string, cls: string) => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    li.className = cls;
+    chips.appendChild(li);
+  };
+  const next = sim.nextOrder;
+  sim.orders.forEach((o, i) => {
+    const text = `${i + 1}. ${NPCS[o.owner].short} · ${o.drink}`;
+    if (o.cancelled) { add(`${text} · left`, 'chip-done'); return; }
+    add(o.served ? `${text} ✓` : text, o.served ? 'chip-done' : i === next ? 'chip-target' : 'chip-order');
+  });
+  if (level.props.some((p) => p.kind === 'hat') && !sim.left.has('sheriff')) add('Hands off the hat', 'chip-danger');
+  if (level.bonus) add('Bonus: peanuts', `chip-bonus${sim.badges.has('Peanuts for Pete') ? ' got' : ''}`);
+  if (level.props.some((p) => p.kind === 'cards')) add('Bonus: cards', `chip-bonus${sim.badges.has('Cheat exposed') ? ' got' : ''}`);
+
+  const pours = $('bottles');
+  pours.innerHTML = '';
+  const nextDrink = next >= 0 ? sim.orders[next].drink : 'water';
+  for (let i = 0; i < level.pours; i++) {
+    const result = sim.pourResults[i];
+    const fill = result ? (result === 'served' || result === 'perfect' || result === 'trick' ? '#d9a441' : '#7a3a2a') : i === sim.shots.length ? DRINK_COLOR[nextDrink] : '#3a2a20';
+    pours.insertAdjacentHTML('beforeend', pixelGlass(fill));
+  }
+  pours.setAttribute('aria-label', `${sim.poursLeft} of ${level.pours} pours left`);
+  $('tips').textContent = `${sim.tips}c`;
+  $('help-tag').hidden = !helpUsed.has(level.id);
+  $('try-tag').textContent = `TRY ${currentTry(level.id)}`;
+  drawPad();
+}
+
+// Size the bar from the whole stage (minus the pull meter), not from the board, so the
+// board can shrink to the bar's width and keep the meter right next to it.
+const stage = $('stage');
+// Must match the landscape media query in style.css. There the bar is sized from the full
+// height first and the side column (min LANDSCAPE_SIDE px) gets whatever width is left.
+const landscape = matchMedia('(min-width: 600px) and (min-aspect-ratio: 1/1)');
+const LANDSCAPE_SIDE = 250;
+function fit() {
+  const s = stage.getBoundingClientRect(), cs = getComputedStyle(stage);
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const meter = $('power').getBoundingClientRect().width + parseFloat(cs.columnGap || '0');
+  const width = landscape.matches ? document.documentElement.clientWidth - LANDSCAPE_SIDE - 12 : s.width;
+  renderer.resize(Math.max(100, width - padX - meter - 6), Math.max(100, s.height - padY - 6));
+}
+new ResizeObserver(fit).observe(stage);
+addEventListener('resize', fit);
+
+// ---------------- What's this? Hover (mouse) or tap (touch) to explain things ----------------
+type Tip = { title: string; text: string; tone: 'danger' | 'order' | 'bonus' | 'info' };
+const QUIRK: Record<string, string> = {
+  sheriff: 'His hat is on the bar. Touch it or splash it and he walks out.',
+  dutch: 'Loud, thirsty, and fond of his beer.',
+  twofist: 'Drinks rye with both hands.',
+  lavinia: 'Card shark. Knock her deck to expose her cheating, for a bonus.',
+  pete: 'Asleep on his elbow. When it slips, his arm slaps across the bar.',
+};
+function npcOrders(id: string) {
+  const list = sim.orders.map((o, i) => ({ o, i })).filter(({ o }) => o.owner === id);
+  if (!list.length) return 'Not ordering tonight.';
+  if (sim.left.has(id as never)) return 'Walked out.';
+  return list.map(({ o, i }) => `Order ${i + 1}: ${o.drink}${o.served ? ' (served)' : i === sim.nextOrder ? ' (pour this now)' : ''}`).join('. ') + '.';
+}
+function describeAt(wx: number, wy: number): Tip | null {
+  const L = sim.level;
+  const near = (x: number, y: number, r: number) => Math.hypot(wx - x, wy - y) <= r;
+  for (const p of sim.props) {
+    if (!p.body || !near(p.body.position.x, p.body.position.y, 18)) continue;
+    if (p.kind === 'hat') return { tone: 'danger', title: "SHERIFF'S HAT · AVOID", text: 'Touch it or splash it and the sheriff walks out, taking his order and his tip with him.' };
+    return { tone: 'bonus', title: "LAVINIA'S DECK · BONUS", text: 'Knock it with a drink to expose her hidden ace.' };
+  }
+  if (sim.bowl && near(sim.bowl.position.x, sim.bowl.position.y, 17)) {
+    return { tone: 'bonus', title: 'PEANUT BOWL · BONUS', text: L.bonus ? "Push it into Pete's dotted spot for a bonus. It's heavy: a straight hit bounces your drink back." : 'Heavy. A straight hit bounces your drink back.' };
+  }
+  for (const g of sim.glasses) {
+    if (!g.body || !near(g.body.position.x, g.body.position.y, 13)) continue;
+    const who = g.owner ? `${NPCS[g.owner].short}'s ${g.drink}` : g.drink;
+    if (g.role === 'served') return { tone: 'info', title: `${who.toUpperCase()} · SERVED`, text: 'Knock it out of its circle and they\'ll want another.' };
+    if (g.role === 'stray') return { tone: 'order', title: `${who.toUpperCase()} · MISSED`, text: 'Still counts if you knock it into its circle (a trick shot, +25c). Drinks bounce off each other.' };
+    return { tone: 'info', title: who.toUpperCase(), text: 'A drink already on the bar. Drinks bounce off each other.' };
+  }
+  for (const p of L.posts) {
+    if (!near(p.x, p.y, p.r + 6)) continue;
+    return { tone: 'info', title: p.kind === 'tap' ? 'BEER TAP' : 'TIP JAR', text: "Doesn't move. Drinks bounce off it, but slam into it too hard and yours spills." };
+  }
+  for (const n of L.npcs) {
+    const x = n.side === 'left' ? 82 : 310;
+    if (Math.abs(wx - x) < 32 && Math.abs(wy - n.y) < 36) return { tone: n.id === 'sheriff' ? 'danger' : 'info', title: NPCS[n.id].name, text: `${npcOrders(n.id)} ${QUIRK[n.id]}` };
+  }
+  for (let i = 0; i < sim.orders.length; i++) {
+    const o = sim.orders[i];
+    if (!near(o.x, o.y, o.r + 3)) continue;
+    return { tone: 'order', title: `ORDER ${i + 1} · ${NPCS[o.owner].short.toUpperCase()}'S ${o.drink.toUpperCase()}`, text: o.served ? 'Served.' : 'Stop the drink inside this circle. Closer to the middle, bigger tip.' };
+  }
+  if (L.bonus && near(L.bonus.x, L.bonus.y, L.bonus.r + 3)) return { tone: 'bonus', title: "PETE'S PEANUT SPOT", text: 'Slide the peanut bowl in here for a bonus.' };
+  for (let i = sim.puddles.length - 1; i >= 0; i--) {
+    const pd = sim.puddles[i];
+    if (!pointInPoly(wx, wy, pd.poly)) continue;
+    const sticky = pd.drink === 'sarsaparilla';
+    return { tone: 'info', title: `${pd.drink.toUpperCase()} PUDDLE`, text: sticky ? 'Sticky: drinks slow down fast in it.' : 'Slippery: drinks slide further across it.' };
+  }
+  const c = L.counter;
+  const side = wx < c.x + 10 ? 'left' : wx > c.x + c.w - 10 ? 'right' : null;
+  if (side && wy > c.y && wy < c.y + c.h) {
+    const rail = L.rails.find((r) => r.side === side && wy >= r.from && wy <= r.to);
+    if (!rail) return { tone: 'danger', title: 'NO RAIL', text: 'Drinks slide straight off here and smash.' };
+    return rail.type === 'brass'
+      ? { tone: 'info', title: 'BRASS RAIL', text: 'Bouncy. Bank shots off it earn +15c. Spin changes the bounce.' }
+      : { tone: 'info', title: 'TIMBER RAIL', text: 'Dead wood. Drinks stop with a thud.' };
+  }
+  return null;
+}
+const tipEl = $('tip');
+let tipTimer = 0;
+function showTip(e: PointerEvent, linger: boolean) {
+  const p = toWorld(e);
+  const t = describeAt(p.x, p.y);
+  if (!t) { tipEl.hidden = true; return; }
+  tipEl.className = `tip tip-${t.tone}`;
+  tipEl.innerHTML = `<strong>${t.title}</strong><span>${t.text}</span>`;
+  tipEl.hidden = false;
+  const b = board.getBoundingClientRect();
+  const x = e.clientX - b.left, y = e.clientY - b.top;
+  const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+  tipEl.style.left = `${Math.max(4, Math.min(b.width - w - 4, x - w / 2))}px`;
+  tipEl.style.top = `${y - h - 14 < 4 ? y + 18 : y - h - 14}px`;
+  clearTimeout(tipTimer);
+  if (linger) tipTimer = window.setTimeout(() => { tipEl.hidden = true; }, 3200);
+}
+canvas.addEventListener('pointermove', (e) => { if (!drag && e.pointerType === 'mouse') showTip(e, false); });
+// Touch fires pointerleave right after lifting the finger, so only a mouse leaving hides the tip.
+canvas.addEventListener('pointerleave', (e) => { if (!drag && e.pointerType === 'mouse') tipEl.hidden = true; });
+
+// ---------------- Reaction cut-ins: a big portrait slides in for the big moments ----------------
+// Art is keyed "<customer>-<mood>", with "<customer>-any" as that customer's fallback for
+// any mood. A moment without art simply shows no cut-in (the small speech bubble still appears).
+const PORTRAITS: Record<string, string> = {
+  'sheriff-angry': sheriffAngry,
+  'dutch-any': dutchAny,
+  'twofist-any': twofistAny,
+  'lavinia-any': laviniaAny,
+  'pete-any': peteAny,
+  'sheriff-happy': sheriffHappy, 'sheriff-surprised': sheriffSurprised, 'sheriff-sly': sheriffSly,
+  'dutch-angry': dutchAngry, 'dutch-surprised': dutchSurprised,
+  'pete-angry': peteAngry, 'pete-happy': peteHappy, 'pete-surprised': peteSurprised,
+};
+/** Background colour of the cut-in band per mood. */
+const CUTIN_MOOD: Record<string, string> = { angry: 'mood-angry', happy: 'mood-happy', surprised: 'mood-surprised', sly: 'mood-sly' };
+let peteSlapShown = false;
+let lastServed: NpcId | null = null;
+const DRY_LINES: Record<string, string> = {
+  sheriff: "Outta bottles? I'll be at the next saloon.",
+  dutch: 'That was the LAST bottle?! I came here thirsty!',
+  twofist: 'Both hands empty. Not a good look, barkeep.',
+  lavinia: 'All night and not a single drink. Charming.',
+  pete: '*SLAP* ...where\'s my drink?!',
+};
+const SLY_LINES: Record<string, string> = {
+  sheriff: "Not bad, kid. Not bad at all.",
+  dutch: 'Same again tomorrow, eh? Ha!',
+  twofist: 'Steady hands. I could use you at the tables.',
+  lavinia: "Darling, you'd clean up at poker.",
+  pete: '...zzz... same again... zzz',
+};
+const cutinEl = $('cutin');
+let cutinTimer = 0;
+function cutIn(npc: string, mood: string, line: string) {
+  const src = PORTRAITS[`${npc}-${mood}`] ?? PORTRAITS[`${npc}-any`];
+  if (!src) return;
+  cutinEl.classList.remove(...Object.values(CUTIN_MOOD));
+  cutinEl.classList.add(CUTIN_MOOD[mood] ?? 'mood-angry');
+  ($('cutin-img') as HTMLImageElement).src = src;
+  $('cutin-name').textContent = NPCS[npc as keyof typeof NPCS]?.name ?? '';
+  $('cutin-line').textContent = line;
+  cutinEl.hidden = false;
+  cutinEl.classList.remove('in', 'out');
+  void cutinEl.offsetWidth; // restart the slide-in
+  cutinEl.classList.add('in');
+  clearTimeout(cutinTimer);
+  cutinTimer = window.setTimeout(hideCutIn, 2200);
+}
+function hideCutIn() {
+  if (cutinEl.hidden) return;
+  cutinEl.classList.add('out');
+  clearTimeout(cutinTimer);
+  cutinTimer = window.setTimeout(() => { cutinEl.hidden = true; }, 260);
+}
+cutinEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); hideCutIn(); });
+
+// ---------------- Input: drag back anywhere, release to slide ----------------
+function toWorld(e: PointerEvent) {
+  const r = canvas.getBoundingClientRect();
+  return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (mode !== 'play' || sim.status !== 'aiming' || sim.poursLeft <= 0) return;
+  canvas.setPointerCapture(e.pointerId);
+  $('hint').classList.add('fade');
+  tipEl.hidden = true;
+  const p = toWorld(e);
+  drag = { x0: p.x, y0: p.y };
+  aim = null;
+  showPower(0, false);
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const p = toWorld(e);
+  const dx = drag.x0 - p.x, dy = drag.y0 - p.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 6) { aim = null; showPower(0, false); return; }
+  aim = { angle: Math.atan2(dy, dx), power: Math.min(1, len / 150) };
+  aimAngle = clampAngle(aim.angle);
+  showPower(aim.power, false);
+});
+
+let lastAimed = false;
+function endDrag() {
+  lastAimed = !!aim;
+  if (drag && aim && aim.power > 0.06 && sim.status === 'aiming') {
+    if (sim.fire(aim.angle, aim.power, spin)) {
+      recorded = [...sim.shots];
+      slowSteps = SLOW_STEPS;
+      countTryIfFirstPour();
+      showPower(aim.power, true);
+      updateHud();
+    }
+  } else {
+    showPower(0, true);
+  }
+  drag = null;
+  aim = null;
+}
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointerup', (e) => { if (!lastAimed) showTip(e, true); });
+canvas.addEventListener('pointercancel', () => { drag = null; aim = null; });
+
+// ---------------- Pool-style controls: Q/E to aim, pull to shoot ----------------
+// Like 8 Ball Pool: turn the aim with Q and E (hold Shift for fine aim), then either hold
+// Space to draw the hand back (release to pour) or drag the pull handle beside the bar down.
+let aimAngle = -Math.PI / 2;
+let aimShown = false; // the guideline stays up once you've aimed with keys or the handle
+let turning = 0; // -1 (Q), 0, 1 (E)
+let fine = false;
+let charge = 0;
+let charging: null | { by: 'space'; started: number } | { by: 'handle'; y0: number; height: number } = null;
+const TURN_SPEED = Math.PI / 3; // radians per second (60°/s); Shift: a quarter of that
+const CHARGE_MS = 1300; // Space: empty to full, then back down, so you time the release
+
+function clampAngle(a: number) {
+  // Keep aims pointing up the bar (between nearly flat left and nearly flat right).
+  const deg = (a * 180) / Math.PI;
+  return (Math.max(-178, Math.min(-2, deg > 90 ? deg - 360 : deg)) * Math.PI) / 180;
+}
+function canShoot() { return mode === 'play' && sim.status === 'aiming' && sim.poursLeft > 0 && !drag; }
+function shootCharged() {
+  const by = charging?.by;
+  const power = charge;
+  charging = null;
+  charge = 0;
+  const min = by === 'space' ? 0.1 : 0.04; // a quick Space tap (e.g. mashing to restart) doesn't pour
+  if (power < min || !canShoot()) { showPower(0, true); placeGrip(0); return; }
+  if (sim.fire(aimAngle, power, spin)) {
+    recorded = [...sim.shots];
+    slowSteps = SLOW_STEPS;
+    countTryIfFirstPour();
+    showPower(power, true);
+    placeGrip(0);
+    updateHud();
+  }
+}
+
+// The pull handle sits at the top of the power bar and slides down as you pull.
+const grip = $('power-grip');
+function placeGrip(p: number) {
+  const h = meter.getBoundingClientRect().height;
+  grip.style.transform = `translateY(${Math.round(p * (h - 6))}px)`;
+}
+$('power').addEventListener('pointerdown', (e) => {
+  if (!canShoot()) return;
+  $('power').setPointerCapture(e.pointerId);
+  aimShown = true;
+  charging = { by: 'handle', y0: e.clientY, height: meter.getBoundingClientRect().height };
+  charge = 0;
+});
+$('power').addEventListener('pointermove', (e) => {
+  if (charging?.by !== 'handle') return;
+  charge = Math.max(0, Math.min(1, (e.clientY - charging.y0) / charging.height));
+});
+$('power').addEventListener('pointerup', () => { if (charging?.by === 'handle') shootCharged(); });
+$('power').addEventListener('pointercancel', () => { if (charging?.by === 'handle') { charging = null; charge = 0; placeGrip(0); showPower(0, true); } });
+
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|BUTTON)$/.test(e.target.tagName) && e.code === 'Space') return;
+  const k = e.key.toLowerCase();
+  if (k === 'q' || k === 'e') { turning = k === 'q' ? -1 : 1; aimShown = true; fine = e.shiftKey; e.preventDefault(); }
+  if (e.key === 'Shift') fine = true;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    // Didn't finish the night? Space starts it again straight away, even before the card shows.
+    if (!e.repeat && mode === 'play' && (sim.status === 'failed' || sim.status === 'out')) { loadLevel(levelIndex); return; }
+    if (!e.repeat && canShoot() && !charging) { aimShown = true; charging = { by: 'space', started: performance.now() }; }
+  }
+  if (e.key === 'Escape' && charging) { charging = null; charge = 0; placeGrip(0); showPower(0, true); }
+});
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if ((k === 'q' && turning === -1) || (k === 'e' && turning === 1)) turning = 0;
+  if (e.key === 'Shift') fine = false;
+  if (e.code === 'Space' && charging?.by === 'space') { e.preventDefault(); shootCharged(); }
+});
+
+/** Called every frame: turn the aim, grow the Space charge, and show the guideline. */
+function updatePoolControls(dt: number, now: number) {
+  if (turning) aimAngle = clampAngle(aimAngle + turning * TURN_SPEED * (fine ? 0.25 : 1) * (dt / 1000));
+  if (charging?.by === 'space') {
+    const t = ((now - charging.started) % (CHARGE_MS * 2)) / CHARGE_MS;
+    charge = t <= 1 ? t : 2 - t; // up to full, then back down
+  }
+  if (charging) { showPower(charge, false); placeGrip(charge); }
+  if (!drag && !lesson) aim = (aimShown || charging) && canShoot() ? { angle: aimAngle, power: charge } : aim && drag ? aim : null;
+}
+
+/** When the last pour stopped just outside its circle, says which way it was off. */
+function nearMiss(): string | null {
+  const g = [...sim.glasses].reverse().find((x) => x.id.startsWith('pour-'));
+  const o = g && g.order >= 0 ? sim.orders[g.order] : null;
+  if (!g?.body || !o || o.served) return null;
+  const { x, y } = g.body.position;
+  const d = Math.hypot(x - o.x, y - o.y);
+  if (d <= o.r || d > o.r + 14) return null;
+  // Compare with the line from the start to the circle: along it is short/long, across it is wide.
+  const s = sim.level.start;
+  const len = Math.hypot(o.x - s.x, o.y - s.y) || 1;
+  const ux = (o.x - s.x) / len, uy = (o.y - s.y) / len;
+  const along = (x - o.x) * ux + (y - o.y) * uy;
+  const across = (x - o.x) * -uy + (y - o.y) * ux;
+  const by = d - o.r < 5 ? 'a hair' : 'a glass-width';
+  if (Math.abs(along) >= Math.abs(across)) return along < 0 ? `Just short, by ${by}.` : `Just long, by ${by}.`;
+  return across > 0 ? `Just wide to the right.` : `Just wide to the left.`;
+}
+
+// ---------------- Result card ----------------
+const RESULT_ICON: Record<string, string> = { perfect: '⭐', served: '🍺', trick: '🎱', miss: '▫️', spill: '💦', smash: '💥' };
+
+function shareText(): string {
+  const L = sim.level;
+  const icons = sim.pourResults.map((r) => RESULT_ICON[r] ?? '▫️').join('');
+  const par = L.orders.length;
+  const lines = [`LAST ORDERS · Night ${L.night} · ${L.title}`, `${icons}  Served ${sim.servedCount}/${L.orders.length} · ${sim.shots.length} pours (par ${par}) · Tips ${sim.tips}¢`];
+  // (A walk-out shows up through the "Sheriff walked out" badge on the next line.)
+  if (sim.badges.size) lines.push([...sim.badges].join(' · '));
+  const tryLine = [triesText(currentTry(L.id), sim.status === 'won')];
+  if (helpUsed.has(L.id)) tryLine.push('Used help');
+  lines.push(tryLine.join(' · '));
+  return lines.join('\n');
+}
+
+function showResult() {
+  const L = sim.level;
+  $('r-night').textContent = `NIGHT ${L.night} · ${L.title.toUpperCase()}`;
+  const used = sim.shots.length;
+  const watchingSolution = mode === 'replay' && replayKind === 'SOLUTION';
+  if (watchingSolution) {
+    $('r-title').textContent = "That's one way";
+    $('r-sub').textContent = 'Your turn. This night is now marked "Used help".';
+  } else if (sim.status === 'won' && sim.left.size) {
+    $('r-title').textContent = 'Everyone else served';
+    $('r-sub').textContent = `The sheriff walked out after you touched his hat, and took his tip with him. ${sim.tips}c in tips.`;
+  } else if (sim.status === 'won') {
+    $('r-title').textContent = 'Everyone served';
+    $('r-sub').textContent = `${used} of ${L.pours} pours used · ${sim.tips}c in tips. The Copper Spur is happy tonight.`;
+  } else if (sim.status === 'failed') {
+    $('r-title').textContent = 'Sheriff not amused';
+    $('r-sub').textContent = sim.failReason;
+  } else {
+    const left = L.orders.length - sim.servedCount;
+    $('r-title').textContent = 'Closing time';
+    $('r-sub').textContent = `Out of pours with ${left} ${left === 1 ? 'customer' : 'customers'} still waiting.`;
+  }
+  const badges = $('r-badges');
+  badges.innerHTML = '';
+  for (const b of sim.badges) {
+    const li = document.createElement('li');
+    li.textContent = b;
+    badges.appendChild(li);
+  }
+  if (!watchingSolution) {
+    const t = currentTry(L.id);
+    const li = document.createElement('li');
+    li.textContent = triesText(t, sim.status === 'won');
+    li.className = t === 1 && sim.status === 'won' ? 'first-try' : 'tries';
+    badges.prepend(li);
+    if (sim.status === 'won' && !night(L.id).solvedOnTry) { night(L.id).solvedOnTry = t; saveProgress(); }
+  }
+  if (helpUsed.has(L.id)) {
+    const li = document.createElement('li');
+    li.textContent = 'Used help';
+    li.className = 'used-help';
+    badges.appendChild(li);
+  }
+  // Stuck? Offer the proven solution, but only after a real attempt that didn't finish.
+  $('r-help').hidden = !(mode === 'play' && sim.status !== 'won' && SOLUTIONS[L.id]);
+  $('r-share').hidden = watchingSolution;
+  $('r-copy').hidden = watchingSolution;
+  $('r-replay').hidden = watchingSolution;
+  $('r-share').textContent = shareText();
+  $('r-next').hidden = levelIndex >= NIGHTS.length - 1;
+  $('r-copy').textContent = 'Copy result';
+  const failed = sim.status !== 'won' && !watchingSolution;
+  const counts = mode === 'play' && isDaily();
+  $('r-post').hidden = !(counts && onReddit());
+  $('r-post').textContent = 'Share in comments';
+  $('r-stats').hidden = true;
+  const tryKey = `${L.id}:${currentTry(L.id)}`;
+  if (counts && reportedTry !== tryKey) {
+    reportedTry = tryKey;
+    journey.end(sim.status === 'won', sim.tips);
+    reportResult({ tries: currentTry(L.id), won: sim.status === 'won', pours: sim.shots.length, tips: sim.tips, help: helpUsed.has(L.id) }).then((st) => {
+      if (!st || !st.players) return;
+      const parts = [`Tonight: ${st.players} ${st.players === 1 ? 'bartender' : 'bartenders'}`, `${Math.round(st.clearRate * 100)}% served everyone`];
+      if (st.avgTries) parts.push(`average ${st.avgTries.toFixed(1)} tries`);
+      if (st.streak > 1) parts.push(`your streak: ${st.streak} nights`);
+      $('r-stats').textContent = parts.join(' · ');
+      $('r-stats').hidden = false;
+    });
+  }
+  $('result').querySelector('.card')!.classList.toggle('failed', failed);
+  $('r-retry').classList.toggle('primary', failed);
+  $('r-copy').classList.toggle('primary', !failed);
+  $('result').hidden = false;
+  if (failed) $('r-retry').focus({ preventScroll: true });
+}
+
+$('r-copy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(shareText());
+    $('r-copy').textContent = 'Copied';
+  } catch {
+    $('r-copy').textContent = 'Copy failed';
+  }
+};
+$('r-post').onclick = async () => {
+  const btn = $<HTMLButtonElement>('r-post');
+  btn.disabled = true;
+  btn.textContent = 'Sharing…';
+  const ok = await shareResult(shareText());
+  if (ok) journey.share();
+  btn.textContent = ok ? 'Shared ✓' : 'Couldn’t share, try again';
+  btn.disabled = ok;
+};
+$('r-retry').onclick = () => loadLevel(levelIndex);
+$('r-help').onclick = () => {
+  const id = NIGHTS[levelIndex].id;
+  markHelpUsed(id);
+  replayShots = SOLUTIONS[id];
+  loadLevel(levelIndex, true, 'SOLUTION');
+};
+$('r-next').onclick = () => loadLevel(Math.min(NIGHTS.length - 1, levelIndex + 1));
+$('r-replay').onclick = () => {
+  replayShots = [...recorded];
+  loadLevel(levelIndex, true, 'REPLAY');
+};
+
+// ---------------- Main loop: fixed 60 Hz simulation steps ----------------
+function onStatusChange(prev: Status) {
+  if (prev === 'rolling' && sim.status === 'aiming' && mode === 'play') {
+    const lastResult = sim.pourResults[sim.pourResults.length - 1];
+    const next = sim.orders[sim.nextOrder];
+    const who = next ? `${NPCS[next.owner].short}'s ${next.drink}` : '';
+    const close = lastResult === 'miss' ? nearMiss() : null;
+    if (close) setHint(`So close! ${close} That glass stays on the bar now. Try ${who} again.`);
+    else if (lastResult === 'miss') setHint(`Missed the spot. That glass stays on the bar now. Try ${who} again.`);
+    else if (lastResult === 'spill' || lastResult === 'smash') setHint(`Spilled. Watch out for the puddle. Pour ${who} again.`);
+    else setHint(`Next up: ${who}.`);
+  }
+  if (sim.status === 'won' || sim.status === 'failed' || sim.status === 'out') {
+    if (sim.status === 'failed') renderer.setMood('sheriff', 'angry');
+    if (mode === 'replay') setHint('Replay finished.');
+    const winner = sim.status === 'won' && mode === 'play' && lastServed && !sim.left.has(lastServed) ? lastServed : null;
+    if (winner) cutIn(winner, 'sly', SLY_LINES[winner] ?? 'Not bad, kid.');
+    // Out of bottles with someone still waiting: the customer you couldn't serve gets the last word.
+    const waiting = sim.status === 'out' && mode === 'play' ? sim.orders.find(o => !o.served && !o.cancelled && !sim.left.has(o.owner)) : undefined;
+    if (waiting) cutIn(waiting.owner, 'angry', DRY_LINES[waiting.owner] ?? 'Still waitin\' on my drink!');
+    resultTimer = window.setTimeout(showResult, winner || waiting ? 2000 : 1200);
+  }
+}
+
+// ---------------- "Show me how": a step-by-step lesson ----------------
+// Before each pour the lesson stops, draws the guideline, sets the spin glass, pulls the
+// hand back to the right strength while a card spells out aim, pull and spin, and then
+// pours in slow motion. The simulation is paused during the explanation, so the pour
+// still happens on exactly the same tick as the proven solution.
+const LESSON_PULL_MS = 1400;
+const LESSON_HOLD_MS = 1100;
+let lesson: { shot: number; started: number } | null = null;
+let savedSpin = 0;
+
+function strengthWord(p: number) {
+  return p < 0.3 ? 'gentle' : p < 0.55 ? 'medium' : p < 0.8 ? 'firm' : 'full';
+}
+function showCoach(i: number, total: number, shot: Shot) {
+  const o = sim.orders[sim.nextOrder] ?? sim.orders[i];
+  const spinText = shot.spin === 0 ? 'None' : `${shot.spin < 0 ? 'Left' : 'Right'} ${Math.round(Math.abs(shot.spin) * 100)}%`;
+  $('coach').innerHTML = `<p class="coach-step">POUR ${i + 1} OF ${total} · ${NPCS[o.owner].short.toUpperCase()}'S ${o.drink.toUpperCase()}</p>
+    <dl class="coach-rows">
+      <div><dt>AIM</dt><dd>Follow the dotted line</dd></div>
+      <div><dt>PULL</dt><dd>${Math.round(shot.power * 100)}% (${strengthWord(shot.power)})</dd></div>
+      <div><dt>SPIN</dt><dd>${spinText}</dd></div>
+    </dl>${sim.level.arm ? '<p class="coach-tip">Wait for Pete\'s arm to pull back before you let go.</p>' : ''}`;
+  $('coach').hidden = false;
+  $('hint').classList.add('fade');
+}
+function hideCoach() { $('coach').hidden = true; }
+
+function frame(now: number) {
+  const dt = Math.min(100, now - last);
+  last = now;
+  updatePoolControls(dt, now);
+  // During a lesson's explanation, hold the bar still and animate the hand instead.
+  if (lesson) {
+    const shot = replayShots[lesson.shot];
+    const t = now - lesson.started;
+    aim = { angle: shot.angle, power: shot.power * Math.min(1, t / LESSON_PULL_MS) };
+    showPower(aim.power, false);
+    if (t >= LESSON_PULL_MS + LESSON_HOLD_MS) {
+      aim = null;
+      hideCoach();
+      lesson = null;
+      sim.fire(shot.angle, shot.power, shot.spin);
+      slowSteps = SLOW_STEPS;
+      updateHud();
+    }
+    renderer.draw(sim, aim, 'SOLUTION', 0);
+    requestAnimationFrame(frame);
+    return;
+  }
+  acc += dt;
+  let steps = 0;
+  const fast = mode === 'replay' && sim.status === 'aiming' && !lesson;
+  while ((acc >= STEP_MS || fast) && steps < (fast ? 40 : 6)) {
+    if (mode === 'replay' && sim.status === 'aiming') {
+      const next = replayShots[sim.shots.length];
+      if (next && sim.tick >= next.tick) {
+        if (replayKind === 'SOLUTION') {
+          // Start the explanation for this pour; the bar waits until it's done.
+          lesson = { shot: sim.shots.length, started: now };
+          spin = next.spin;
+          drawPad();
+          showCoach(sim.shots.length, replayShots.length, next);
+          break;
+        }
+        sim.fire(next.angle, next.power, next.spin);
+        slowSteps = SLOW_STEPS;
+        updateHud();
+      } else if (!next) break;
+    }
+    sim.step();
+    if (slowSteps > 0 && sim.status === 'rolling') slowSteps--; else if (sim.status !== 'rolling') slowSteps = 0;
+    if (!fast) acc -= STEP_MS;
+    steps++;
+    let hud = false;
+    for (const ev of sim.events) {
+      renderer.handle(ev, sim);
+      // Big moments get a portrait cut-in; everything else stays in the small speech bubbles.
+      if (ev.t === 'leave' && ev.npc === 'sheriff') cutIn('sheriff', 'angry', "MY HAT! That's it, I'm leaving!");
+      if (ev.t === 'served' && ev.trick) cutIn(ev.owner, 'surprised', "Well, I'll be! A trick shot!");
+      else if (ev.t === 'served' && ev.quality === 3) cutIn(ev.owner, 'happy', NPCS[ev.owner].lines.perfect);
+      if (ev.t === 'bonus' && ev.kind === 'cards') cutIn('lavinia', 'surprised', 'That ace was there when I sat down!');
+      if (ev.t === 'bonus' && ev.kind === 'peanuts') cutIn('pete', 'happy', '...peanuts? Bless you, kid.');
+      if (ev.t === 'slam' && !peteSlapShown && mode === 'play') { peteSlapShown = true; cutIn('pete', 'angry', '*SLAP* ...wha? Who moved the bar?'); }
+      // A customer's own drink knocked over (not the sheriff walking out, which has its own cut-in).
+      if ((ev.t === 'tip' || ev.t === 'smash') && ev.owner && !sim.left.has(ev.owner) && mode === 'play') cutIn(ev.owner, 'angry', ev.t === 'tip' ? 'Hey! That was MY drink!' : 'On the floor?! That was MY drink!');
+      if (ev.t === 'served') { lastServed = ev.owner; if (mode === 'play' && isDaily()) journey.served(sim.servedCount, sim.level.orders.length); }
+      if (ev.t === 'tip' || ev.t === 'bonus' || ev.t === 'smash' || ev.t === 'served') hud = true;
+    }
+    sim.events = [];
+    if (hud) updateHud();
+    if (sim.status !== lastStatus) {
+      const prev = lastStatus;
+      lastStatus = sim.status;
+      updateHud();
+      onStatusChange(prev);
+    }
+  }
+  if (fast) acc = 0;
+  renderer.draw(sim, aim, mode === 'replay' ? replayKind : false, slowSteps > 0 ? Math.min(1, slowSteps / EASE_STEPS) : 0);
+  requestAnimationFrame(frame);
+}
+
+// Read-only handle for automated checks (frame-by-frame motion tests).
+(window as unknown as { __lastOrders: { sim: () => Sim } }).__lastOrders = { sim: () => sim };
+
+// Start on a practice night straight away, then switch to tonight's night as soon as it arrives.
+loadLevel(0);
+fit();
+requestAnimationFrame(frame);
+void detectReddit();
+fetchNight(requestedDate()).then((n) => {
+  NIGHTS.unshift(n.level);
+  if (n.solution) SOLUTIONS[n.level.id] = n.solution;
+  dailyLoaded = true;
+  if (sim.shots.length === 0 && mode === 'play') loadLevel(0); else { levelIndex++; renderNights(); }
+});

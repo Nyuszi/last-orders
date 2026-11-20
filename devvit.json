@@ -1,0 +1,81 @@
+{
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "last-orders-saloon",
+  "post": {
+    "dir": "dist/client",
+    "entrypoints": {
+      "game": { "entry": "index.html" },
+      "default": {
+        "entry": "splash.html",
+        "height": "tall"
+      }
+    }
+  },
+  "server": {
+    "dir": "dist/server",
+    "entry": "index.js"
+  },
+  "permissions": {
+    "redis": true,
+    "journeys": true,
+    "reddit": {
+      "enable": true,
+      "asUser": [
+        "SUBMIT_COMMENT"
+      ]
+    }
+  },
+  "scheduler": {
+    "tasks": {
+      "daily-post": {
+        "endpoint": "/internal/scheduler/daily-post",
+        "cron": "5 0 * * *"
+      },
+      "watchdog": {
+        "endpoint": "/internal/scheduler/watchdog",
+        "cron": "17 * * * *"
+      }
+    }
+  },
+  "triggers": {
+    "onAppInstall": "/internal/on/app/install"
+  },
+  "menu": {
+    "items": [
+      {
+        "label": "Last Orders: post tonight's night",
+        "description": "Make today's post now if it isn't up yet.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/post-tonight"
+      },
+      {
+        "label": "Last Orders: swap tonight for a handmade night",
+        "description": "Use if tonight's map misbehaves. Run again to undo.",
+        "location": [
+          "subreddit",
+          "post"
+        ],
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/replace-tonight"
+      },
+      {
+        "label": "Last Orders: pause / resume daily posts",
+        "description": "Stops or restarts the automatic post at 00:05 UTC.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/toggle-pause"
+      },
+      {
+        "label": "Last Orders: calendar status",
+        "description": "How many days of tested nights are left.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/calendar-status"
+      }
+    ]
+  },
+  "dev": {
+    "subreddit": "last_orders_saloo_dev"
+  }
+}

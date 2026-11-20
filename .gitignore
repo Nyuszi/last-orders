@@ -1,0 +1,16 @@
+# Dependencies and build output
+node_modules/
+dist/
+
+# Local only
+.env
+.claude/
+last-orders-backup.zip
+calendar/parts/
+calendar/*.log
+
+# Internal planning notes (kept on disk, not published)
+PLAN.md
+submission/CHECKLIST.md
+art/PORTRAIT_PROMPTS.md
+art/MISSING_PORTRAITS.md

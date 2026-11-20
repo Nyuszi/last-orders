@@ -1,0 +1,39 @@
+{
+  "name": "last-orders-saloon",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "npm run typecheck && vite build && npm run build:server",
+    "preview": "vite preview --host",
+    "solve": "tsx scripts/solve.ts",
+    "test": "tsx --test tests/*.test.ts",
+    "daily": "tsx scripts/daily.ts",
+    "solutions": "tsx scripts/solutions.ts",
+    "fair": "tsx scripts/fairness-check.ts",
+    "survey": "tsx scripts/survey.ts",
+    "calendar": "tsx scripts/calendar.ts",
+    "build:server": "esbuild src/server/index.ts --bundle --platform=node --format=cjs --target=node22 --outfile=dist/server/index.js --log-level=warning",
+    "playtest": "devvit playtest",
+    "upload": "npm run build && devvit upload",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit"
+  },
+  "dependencies": {
+    "@devvit/analytics": "0.15.4",
+    "@devvit/web": "0.15.4",
+    "express": "5.3.0",
+    "matter-js": "0.20.0"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/matter-js": "^0.20.2",
+    "@types/node": "^26.6.6",
+    "devvit": "0.15.4",
+    "esbuild": "0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "license": "BSD-3-Clause"
+}

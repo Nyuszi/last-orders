@@ -1,0 +1,292 @@
+/* Pixel saloon: hard edges, stepped shadows, two pixel fonts. One dark look on purpose. */
+:root {
+  color-scheme: dark;
+  --bg: #1d110b;
+  --panel: #2e1c12;
+  --card: #3a2518;
+  --line: #5a3a24;
+  --ink: #1a0f0a;
+  --cream: #f3e6cc;
+  --muted: #cdb894;
+  --brass: #d9a441;
+  --brass-light: #f6dc8f;
+  --amber: #f2b53a;
+  --blue: #7cc2f0;
+  --danger: #e8664a;
+  --green: #6dbb4a;
+  --px: 3px;
+  --head: 'Silkscreen', 'Pixelify Sans', monospace;
+  --body: 'Pixelify Sans', 'Silkscreen', monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--cream); font-family: var(--body); }
+body { overscroll-behavior: none; }
+button { font: inherit; color: inherit; cursor: pointer; }
+canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+:focus-visible { outline: var(--px) solid var(--amber); outline-offset: 2px; }
+
+/* A pixel box: square corners, a dark outline and a stepped drop shadow. */
+.px-box, .brief, .card, .controls {
+  border: var(--px) solid var(--ink);
+  box-shadow: inset 0 0 0 var(--px) var(--line), var(--px) var(--px) 0 var(--ink);
+}
+
+#app {
+  max-width: 480px;
+  height: 100dvh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px 8px; }
+.brand { font-family: var(--head); font-weight: 700; font-size: 22px; margin: 0; letter-spacing: 0.02em; color: var(--brass-light); text-shadow: var(--px) var(--px) 0 var(--ink); }
+.sub { margin: 2px 0 0; font-family: var(--head); font-size: 10px; color: var(--muted); }
+.nights { display: flex; gap: 6px; }
+.nights button {
+  min-width: 36px; height: 36px; border: var(--px) solid var(--ink); background: var(--panel);
+  font-family: var(--head); font-weight: 700; font-size: 14px;
+  box-shadow: inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 #00000055, inset var(--px) var(--px) 0 #ffffff14;
+}
+.nights button[aria-current="true"] { background: var(--brass); color: var(--ink); }
+
+.brief { margin: 0 12px; padding: 9px 11px; background: var(--card); }
+.label { margin: 0; font-family: var(--head); font-size: 10px; color: var(--amber); display: flex; justify-content: space-between; gap: 8px; }
+.label > span:last-child { color: var(--muted); }
+.label-main { color: var(--amber); display: inline-flex; gap: 6px; align-items: center; }
+.help-tag { padding: 1px 4px; background: var(--danger); color: var(--ink); font-size: 8px; }
+.help-tag[hidden] { display: none; }
+.blurb { margin: 3px 0 6px; font-size: 15px; font-weight: 700; line-height: 1.15; }
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.chips li { white-space: nowrap; padding: 2px 5px; font-family: var(--head); font-size: 9px; border: 2px solid var(--ink); }
+.chip-target { background: var(--amber); color: var(--ink); }
+.chip-order { background: var(--panel); color: var(--cream); border-style: dashed !important; border-color: var(--amber) !important; }
+.chip-done { background: transparent; color: var(--muted); text-decoration: line-through; border-color: var(--line) !important; }
+.chip-spare { background: #12283a; color: #cbe7f9; border-color: var(--blue) !important; }
+.chip-bonus { background: transparent; color: var(--muted); border-style: dashed !important; border-color: var(--muted) !important; }
+.chip-bonus.got { color: var(--amber); border-style: solid !important; border-color: var(--amber) !important; }
+
+.stage { flex: 1; min-height: 0; display: flex; align-items: stretch; gap: 6px; padding: 8px 10px 6px; }
+.board { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; }
+#game { display: block; touch-action: none; border: var(--px) solid var(--ink); }
+
+/* Pour strength: a stack of pixel cells that fill from the bottom while you drag. */
+.power { flex: 0 0 34px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.power-label { font-family: var(--head); font-size: 8px; color: var(--muted); }
+.power-meter {
+  display: flex; flex-direction: column; gap: 2px; padding: 3px; width: 26px;
+  background: var(--ink); border: var(--px) solid var(--ink); box-shadow: inset 0 0 0 2px var(--line);
+}
+.power-meter i { display: block; height: 12px; background: #3a2a20; }
+.power-meter i.on { background: var(--cell); }
+.power-meter.resting i.on { opacity: 0.45; }
+.power-val { font-family: var(--head); font-size: 10px; color: var(--cream); font-variant-numeric: tabular-nums; min-width: 4ch; text-align: center; }
+
+.hint {
+  position: absolute; left: 50%; top: 8px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px);
+  margin: 0; padding: 6px 10px; background: var(--ink); border: 2px solid var(--line);
+  font-size: 13px; line-height: 1.25; color: var(--cream); text-align: center; pointer-events: none; transition: opacity 0.4s steps(4);
+}
+.hint.fade { opacity: 0; }
+
+.controls {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 0 8px calc(8px + env(safe-area-inset-bottom)); padding: 9px 12px; background: var(--panel);
+}
+.small-label { font-family: var(--head); font-size: 9px; color: var(--muted); }
+.pours { display: flex; flex-direction: column; gap: 3px; }
+.bottles { display: flex; gap: 4px; align-items: center; min-height: 22px; }
+.bottles svg { display: block; image-rendering: pixelated; }
+.tips { margin: 0; font-family: var(--head); font-size: 13px; font-weight: 700; color: var(--amber); font-variant-numeric: tabular-nums; }
+
+/* Spin: tap the glass where you want to hit it. */
+.spin { display: flex; align-items: center; gap: 10px; }
+#spinpad { width: 84px; height: 84px; touch-action: none; border: var(--px) solid var(--ink); background: var(--ink); cursor: crosshair; }
+.spin-text { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.spin-val { font-family: var(--head); font-size: 12px; font-weight: 700; color: var(--cream); min-width: 9ch; }
+.spin-reset {
+  height: 30px; padding: 0 8px; border: 2px solid var(--ink); background: var(--card); font-family: var(--head); font-size: 10px;
+  box-shadow: inset -2px -2px 0 #00000055, inset 2px 2px 0 #ffffff14;
+}
+
+.result { position: fixed; inset: 0; background: #0d0704cc; display: flex; align-items: flex-end; justify-content: center; padding: 16px; }
+.result[hidden] { display: none; }
+.card { width: 100%; max-width: 440px; background: var(--card); padding: 16px; }
+.card h2 { font-family: var(--head); font-weight: 700; font-size: 22px; margin: 6px 0 4px; color: var(--brass-light); text-shadow: var(--px) var(--px) 0 var(--ink); }
+.r-sub { margin: 0 0 10px; color: var(--muted); font-size: 15px; }
+.badges { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.badges li { padding: 4px 8px; background: var(--amber); color: var(--ink); font-family: var(--head); font-size: 10px; border: 2px solid var(--ink); }
+.share { margin: 0 0 12px; padding: 10px 12px; background: var(--ink); border: 2px dashed var(--line); font-family: var(--head); font-size: 11px; line-height: 1.6; white-space: pre-wrap; color: var(--cream); }
+.r-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.r-actions button {
+  height: 46px; border: var(--px) solid var(--ink); background: var(--panel); font-family: var(--head); font-size: 11px; font-weight: 700;
+  box-shadow: inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 #00000055, inset var(--px) var(--px) 0 #ffffff14;
+}
+.r-actions button:active, .nights button:active, .spin-reset:active { box-shadow: inset var(--px) var(--px) 0 #00000055; }
+.r-actions .primary { background: var(--brass); color: var(--ink); }
+.r-actions .help { grid-column: 1 / -1; background: #12283a; color: #cbe7f9; }
+.r-actions [hidden] { display: none; }
+.badges li.used-help { background: var(--danger); }
+
+@media (prefers-reduced-motion: reduce) { .hint { transition: none; } }
+
+/* "Show me how" lesson card, pinned to the top of the bar. */
+.coach {
+  position: absolute; left: 50%; top: 6px; transform: translateX(-50%); width: min(90%, 290px);
+  padding: 6px 9px; background: var(--ink); border: 3px solid var(--blue);
+  box-shadow: 3px 3px 0 #000; pointer-events: none;
+}
+.coach[hidden] { display: none; }
+.coach-step { margin: 0 0 4px; font-family: var(--head); font-size: 10px; color: var(--blue); }
+.coach-rows { margin: 0; display: grid; gap: 3px; }
+.coach-rows div { display: grid; grid-template-columns: 4.5ch 1fr; gap: 8px; align-items: baseline; }
+.coach-rows dt { font-family: var(--head); font-size: 9px; color: var(--muted); }
+.coach-rows dd { margin: 0; font-size: 13px; color: var(--cream); }
+.coach-tip { margin: 6px 0 0; font-size: 13px; color: var(--amber); }
+.chip-danger { background: #3a120c; color: #ffd2c4; border-color: var(--danger) !important; }
+
+/* "What's this?" box: hover with a mouse, tap on a phone. */
+.tip {
+  position: absolute; z-index: 5; max-width: 230px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px;
+  background: var(--ink); border: 3px solid var(--line); box-shadow: 3px 3px 0 #000; pointer-events: none;
+}
+.tip[hidden] { display: none; }
+.tip strong { font-family: var(--head); font-size: 10px; font-weight: 700; color: var(--cream); }
+.tip span { font-size: 13px; line-height: 1.3; color: var(--cream); }
+.tip-danger { border-color: var(--danger); }
+.tip-danger strong { color: #ff9a80; }
+.tip-order { border-color: var(--amber); }
+.tip-order strong { color: var(--amber); }
+.tip-bonus { border-color: var(--muted); border-style: dashed; }
+
+/* The power bar doubles as a pull handle (drag it down, let go to pour), like a pool cue. */
+.power { cursor: ns-resize; touch-action: none; user-select: none; }
+.power-track { position: relative; }
+.power-grip {
+  position: absolute; left: -6px; right: -6px; top: -4px; height: 8px;
+  background: var(--brass); border: 2px solid var(--ink); box-shadow: 0 2px 0 #000;
+  pointer-events: none; transition: transform 0.05s linear;
+}
+.power-grip::after { content: ''; position: absolute; left: 50%; top: 1px; width: 10px; height: 2px; margin-left: -5px; background: var(--brass-light); }
+
+/* Keyboard reminder, only where there's a mouse (and so probably a keyboard). */
+.keys { display: none; margin: 0; font-size: 12px; color: var(--muted); line-height: 1.6; flex: 1; text-align: center; }
+.keys kbd { font-family: var(--head); font-size: 9px; color: var(--cream); background: var(--card); border: 2px solid var(--ink); padding: 0 4px; margin: 0 1px; }
+@media (pointer: fine) { .keys { display: block; } }
+/* Phone-sized frames (including Reddit's mobile preview on desktop): no keyboard hints, keep the bottom bar short. */
+@media (max-width: 520px) { .keys, .key-hint { display: none !important; } }
+
+/* Didn't finish the night: "Play again" leads, full width and first. */
+.card.failed .r-actions #r-retry { order: -1; grid-column: 1 / -1; height: 56px; font-size: 14px; }
+.key-hint { display: none; font-family: var(--head); font-size: 9px; padding: 1px 4px; margin-left: 6px; border: 2px solid var(--ink); background: #00000022; vertical-align: middle; }
+@media (pointer: fine) { .key-hint { display: inline-block; } }
+
+/* Which try this is today, and the matching badge on the result card. */
+.try-tag { padding: 1px 4px; background: var(--card); color: var(--cream); border: 2px solid var(--line); font-size: 8px; }
+.badges li.first-try { background: #6dbb4a; }
+.badges li.tries { background: var(--card); color: var(--cream); border-color: var(--line); }
+
+/* Reaction cut-in: a slanted band of speed lines with the portrait and a speech box. */
+.cutin { position: absolute; left: 0; right: 0; top: 6%; z-index: 9; cursor: pointer; }
+.cutin[hidden] { display: none; }
+/* The band is a stage: the striped strip only rises to about shoulder height, and the portrait
+   stands on it at full size, head, hat and raised arms above the strip, never cropped. */
+.cutin-band {
+  --cut-h: clamp(150px, 30vh, 220px);
+  position: relative; height: var(--cut-h);
+}
+.cutin-band::before {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 56%;
+  background:
+    repeating-linear-gradient(-8deg, transparent 0 7px, #e8664a55 7px 9px),
+    linear-gradient(90deg, #5a1410, #8a2016 60%, #5a1410);
+  border-top: 3px solid var(--ink); border-bottom: 3px solid var(--ink);
+  clip-path: polygon(0 10%, 100% 0, 100% 92%, 0 100%);
+  box-shadow: 0 3px 0 #000;
+}
+.cutin-band img {
+  position: absolute; left: 2%; bottom: 0; height: 100%; width: auto; max-width: 62%; object-fit: contain; object-position: left bottom;
+  z-index: 1; filter: drop-shadow(3px 3px 0 #0008);
+}
+.cutin-bubble {
+  position: absolute; z-index: 2; right: 8px; bottom: 6%; max-width: 40%; margin: 0; padding: 6px 9px;
+  background: var(--cream); color: var(--ink); border: 3px solid var(--ink); box-shadow: 3px 3px 0 #000;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.cutin-bubble span { font-family: var(--head); font-size: 9px; color: #b8352a; }
+.cutin-bubble strong { font-family: var(--head); font-size: 13px; line-height: 1.15; }
+@keyframes cutin-in { from { transform: translateX(-105%); } to { transform: none; } }
+@keyframes cutin-out { from { transform: none; opacity: 1; } to { transform: translateX(105%); opacity: 0; } }
+.cutin.in .cutin-band { animation: cutin-in 0.22s steps(6) both; }
+.cutin.out .cutin-band { animation: cutin-out 0.24s steps(6) both; }
+@media (prefers-reduced-motion: reduce) { .cutin.in .cutin-band, .cutin.out .cutin-band { animation: none; } }
+
+/* ---------- Phones: give the bar the room ---------- */
+@media (max-width: 520px) {
+  .top { padding: 6px 10px 4px; gap: 8px; }
+  .brand { font-size: 16px; text-shadow: 2px 2px 0 var(--ink); }
+  .sub { font-size: 8px; margin-top: 1px; }
+  .nights { gap: 4px; }
+  .nights button { min-width: 30px; height: 30px; font-size: 12px; }
+
+  /* Orders: one tight block, the scene line moves to the hint at the start of the night. */
+  .brief { margin: 0 6px; padding: 5px 7px; box-shadow: inset 0 0 0 2px var(--line), 2px 2px 0 var(--ink); border-width: 2px; }
+  .label { font-size: 8px; }
+  .blurb { display: none; }
+  .chips { margin-top: 4px; gap: 3px; }
+  .chips li { font-size: 8px; padding: 1px 4px; border-width: 1px; }
+
+  .stage { padding: 4px 4px 4px 2px; gap: 3px; }
+  .power { flex: 0 0 24px; gap: 2px; }
+  .power-label { font-size: 6px; }
+  .power-meter { width: 18px; padding: 2px; gap: 1px; }
+  .power-meter i { height: 9px; }
+  .power-grip { left: -4px; right: -4px; }
+  .power-val { font-size: 8px; }
+
+  .controls { margin: 0 6px calc(6px + env(safe-area-inset-bottom)); padding: 5px 8px; gap: 8px; border-width: 2px; box-shadow: inset 0 0 0 2px var(--line), 2px 2px 0 var(--ink); }
+  .pours { flex-direction: row; align-items: center; gap: 8px; }
+  .pours > .small-label { display: none; }
+  .bottles svg { width: 13px; height: 16px; }
+  .tips { font-size: 11px; }
+  .spin { gap: 6px; }
+  #spinpad { width: 48px; height: 48px; border-width: 2px; }
+  .spin-text { gap: 2px; }
+  .spin-val { font-size: 9px; min-width: 8ch; }
+  .spin-reset { height: 24px; padding: 0 6px; font-size: 8px; }
+  .hint { font-size: 12px; padding: 4px 8px; }
+}
+
+/* ---------- Landscape frames (desktop, Reddit's expanded view): bar on the right, full height ---------- */
+@media (min-width: 600px) and (min-aspect-ratio: 1/1) {
+  #app {
+    max-width: none;
+    display: grid;
+    /* The bar column is as wide as the bar (sized from the height in main.ts); the side column takes the rest. */
+    grid-template-columns: minmax(250px, 400px) auto;
+    justify-content: center;
+    /* Left column is centred vertically: spacer, header, orders, controls, spacer. */
+    grid-template-rows: 1fr auto auto auto 1fr;
+    row-gap: 12px;
+    column-gap: 4px;
+  }
+  .top { grid-column: 1; grid-row: 2; flex-wrap: wrap; }
+  .brief { grid-column: 1; grid-row: 3; }
+  .controls { grid-column: 1; grid-row: 4; flex-wrap: wrap; margin-bottom: 0; }
+  .controls .keys { order: 3; flex-basis: 100%; }
+  .stage { grid-column: 2; grid-row: 1 / -1; padding: 8px 10px 8px 4px; justify-content: center; gap: 10px; min-height: 0; }
+  .top, .brief, .controls { min-width: 0; }
+  .board { flex: 0 0 auto; }
+}
+
+/* Cut-in band colour by mood */
+.cutin.mood-happy .cutin-band::before { background: repeating-linear-gradient(-8deg, transparent 0 7px, #f2b53a55 7px 9px), linear-gradient(90deg, #5a3e10, #8a6216 60%, #5a3e10); }
+.cutin.mood-surprised .cutin-band::before { background: repeating-linear-gradient(-8deg, transparent 0 7px, #7cc2f055 7px 9px), linear-gradient(90deg, #102a44, #18406a 60%, #102a44); }
+.cutin.mood-sly .cutin-band::before { background: repeating-linear-gradient(-8deg, transparent 0 7px, #a07ac055 7px 9px), linear-gradient(90deg, #2a1838, #44285a 60%, #2a1838); }
+.cutin.mood-happy .cutin-bubble span, .cutin.mood-surprised .cutin-bubble span, .cutin.mood-sly .cutin-bubble span { color: #5a3a24; }
+
+/* Tonight's night in the header, and the community line on the result card. */
+.nights button.today { min-width: 0; padding: 0 8px; font-size: 11px; letter-spacing: .06em; }
+.r-stats { margin: 0; font-family: var(--body, inherit); font-size: 12px; line-height: 1.4; color: var(--muted, #b89f80); text-align: center; }

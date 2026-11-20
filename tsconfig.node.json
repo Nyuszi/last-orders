@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "customConditions": [] },
+  "include": ["src/server", "scripts", "tests"],
+  "exclude": []
+}
