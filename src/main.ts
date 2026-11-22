@@ -3,8 +3,7 @@ import { Renderer, W, H, type Aim } from './render';
 import { Sim, STEP_MS, pointInPoly, type Shot, type Status } from './sim';
 import { SOLUTIONS } from './solutions';
 import { fetchNight, requestedDate } from './daily';
-import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';
-// Every portrait in assets/portraits is picked up automatically, keyed by its file name
+import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';// Every portrait in assets/portraits is picked up automatically, keyed by its file name
 // ("<customer>-<mood>.webp"), so new art only has to be dropped into the folder.
 const PORTRAIT_FILES = import.meta.glob<string>('./assets/portraits/*.webp', { eager: true, query: '?inline', import: 'default' });
 
@@ -652,23 +651,8 @@ function showResult() {
   if (counts && reportedTry !== tryKey) {
     reportedTry = tryKey;
     journey.end(sim.status === 'won', sim.tips);
-    reportResult({ tries: currentTry(L.id), won: sim.status === 'won', pours: sim.shots.length, tips: sim.tips, help: helpUsed.has(L.id) }).then((st) => {
-      if (!st || !st.players) return;
-      // Read naturally with few players: no "1 bartender · 0% served everyone".
-      const clears = Math.round(st.clearRate * st.players);
-      const parts: string[] = [];
-      if (st.players === 1) parts.push("You're tonight's first bartender");
-      else {
-        parts.push(`${st.players} bartenders tonight`);
-        if (clears === 0) parts.push('nobody has served everyone yet');
-        else if (st.players < 10) parts.push(`${clears} served everyone`);
-        else parts.push(`${Math.round(st.clearRate * 100)}% served everyone`);
-      }
-      if (st.avgTries && clears >= 3) parts.push(`average ${st.avgTries.toFixed(1)} tries`);
-      if (st.streak > 1) parts.push(`your streak: ${st.streak} nights`);
-      $('r-stats').textContent = parts.join(' · ');
-      $('r-stats').hidden = false;
-    });
+    // Still recorded on the server (players, clears, streaks); just not shown on the card.
+    void reportResult({ tries: currentTry(L.id), won: sim.status === 'won', pours: sim.shots.length, tips: sim.tips, help: helpUsed.has(L.id) });
   }
   $('result').querySelector('.card')!.classList.toggle('failed', failed);
   $('r-retry').classList.toggle('primary', failed);
