@@ -161,15 +161,9 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 .tip-order strong { color: var(--amber); }
 .tip-bonus { border-color: var(--muted); border-style: dashed; }
 
-/* The power bar doubles as a pull handle (drag it down, let go to pour), like a pool cue. */
-.power { cursor: ns-resize; touch-action: none; user-select: none; }
+/* The power bar only displays the strength; you pour by pulling on the bar (or Space). */
+.power { user-select: none; pointer-events: none; }
 .power-track { position: relative; }
-.power-grip {
-  position: absolute; left: -6px; right: -6px; top: -4px; height: 8px;
-  background: var(--brass); border: 2px solid var(--ink); box-shadow: 0 2px 0 #000;
-  pointer-events: none; transition: transform 0.05s linear;
-}
-.power-grip::after { content: ''; position: absolute; left: 50%; top: 1px; width: 10px; height: 2px; margin-left: -5px; background: var(--brass-light); }
 
 /* Keyboard reminder, only where there's a mouse (and so probably a keyboard). */
 .keys { display: none; margin: 0; font-size: 12px; color: var(--muted); line-height: 1.6; flex: 1; text-align: center; }
@@ -243,7 +237,6 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   .power-label { font-size: 7px; }
   .power-meter { width: 22px; padding: 2px; gap: 2px; }
   .power-meter i { height: 14px; }
-  .power-grip { left: -4px; right: -4px; }
   .power-val { font-size: 9px; }
 
   .controls { margin: 0 6px calc(6px + env(safe-area-inset-bottom)); padding: 5px 8px; gap: 8px; border-width: 2px; box-shadow: inset 0 0 0 2px var(--line), 2px 2px 0 var(--ink); }
@@ -391,7 +384,6 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   .power { flex: 0 0 52px; gap: 6px; }
   .power-meter { width: 40px; padding: 4px; gap: 3px; }
   .power-meter i { height: 28px; }
-  .power-grip { left: -7px; right: -7px; height: 12px; top: -6px; }
   .power-label { font-size: 11px; }
   .power-val { font-size: 14px; }
   /* There's room for the spin ball on desktop: always shown, no toggle. */
@@ -421,7 +413,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   /* The pull meter moves into the bottom bar as a horizontal strip (main.ts moves it there).
      It's a read-out on phones: you pull on the bar itself. */
   .controls .power { flex: 1 1 auto; min-width: 0; flex-direction: row; gap: 5px; pointer-events: none; }
-  .controls .power-label, .controls .power-grip { display: none; }
+  .controls .power-label { display: none; }
   .controls .power-track { flex: 1 1 auto; min-width: 0; }
   .controls .power-meter { flex-direction: row; width: auto; height: 16px; padding: 2px; gap: 2px; }
   .controls .power-meter i { height: auto; flex: 1 1 0; }

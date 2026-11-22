@@ -188,7 +188,6 @@ function loadLevel(i: number, asReplay = false, kind: 'REPLAY' | 'SOLUTION' = 'R
   if (document.getElementById('cutin')) { clearTimeout(cutinTimer); cutinEl.hidden = true; }
   peteSlapShown = false; lastServed = null;
   aimShown = false; charging = null; charge = 0;
-  if (document.getElementById('power-grip')) placeGrip(0);
   if (document.getElementById('coach')) hideCoach();
   if (meter.children.length) showPower(0, true);
   levelIndex = i;
@@ -778,14 +777,14 @@ canvas.addEventListener('pointerup', (e) => { if (!lastAimed) showTip(e, true); 
 canvas.addEventListener('pointercancel', () => { drag = null; aim = null; showPower(0, true); $('hint').classList.add('fade'); });
 
 // ---------------- Pool-style controls: Q/E to aim, pull to shoot ----------------
-// Like 8 Ball Pool: turn the aim with Q and E (hold Shift for fine aim), then either hold
-// Space to draw the hand back (release to pour) or drag the pull handle beside the bar down.
+// Like 8 Ball Pool: turn the aim with Q and E (hold Shift for fine aim), then hold Space to
+// draw the hand back and release to pour. The power meter only displays the strength.
 let aimAngle = -Math.PI / 2;
-let aimShown = false; // the guideline stays up once you've aimed with keys or the handle
+let aimShown = false; // the guideline stays up once you've aimed with keys
 let turning = 0; // -1 (Q), 0, 1 (E)
 let fine = false;
 let charge = 0;
-let charging: null | { by: 'space'; started: number } | { by: 'handle'; y0: number; height: number } = null;
+let charging: null | { by: 'space'; started: number } = null;
 const TURN_SPEED = Math.PI / 3; // radians per second (60°/s); Shift: a quarter of that
 const CHARGE_MS = 1300; // Space: empty to full, then back down, so you time the release
 
@@ -796,42 +795,20 @@ function clampAngle(a: number) {
 }
 function canShoot() { return mode === 'play' && sim.status === 'aiming' && sim.poursLeft > 0 && !drag; }
 function shootCharged() {
-  const by = charging?.by;
   const power = charge;
   charging = null;
   charge = 0;
-  const min = by === 'space' ? 0.1 : 0.04; // a quick Space tap (e.g. mashing to restart) doesn't pour
-  if (power < min || !canShoot()) { showPower(0, true); placeGrip(0); return; }
+  // A quick Space tap (e.g. mashing to restart) doesn't pour.
+  if (power < 0.1 || !canShoot()) { showPower(0, true); return; }
   if (sim.fire(aimAngle, power, spin)) {
     recorded = [...sim.shots];
     slowSteps = SLOW_STEPS;
     countTryIfFirstPour();
     showPower(power, true);
-    placeGrip(0);
     updateHud();
   }
 }
 
-// The pull handle sits at the top of the power bar and slides down as you pull.
-const grip = $('power-grip');
-function placeGrip(p: number) {
-  const h = meter.getBoundingClientRect().height;
-  grip.style.transform = `translateY(${Math.round(p * (h - 6))}px)`;
-}
-$('power').addEventListener('pointerdown', (e) => {
-  if (!canShoot()) return;
-  if (introOpen) closeIntro();
-  $('power').setPointerCapture(e.pointerId);
-  aimShown = true;
-  charging = { by: 'handle', y0: e.clientY, height: meter.getBoundingClientRect().height };
-  charge = 0;
-});
-$('power').addEventListener('pointermove', (e) => {
-  if (charging?.by !== 'handle') return;
-  charge = Math.max(0, Math.min(1, (e.clientY - charging.y0) / charging.height));
-});
-$('power').addEventListener('pointerup', () => { if (charging?.by === 'handle') shootCharged(); });
-$('power').addEventListener('pointercancel', () => { if (charging?.by === 'handle') { charging = null; charge = 0; placeGrip(0); showPower(0, true); } });
 
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|BUTTON)$/.test(e.target.tagName) && e.code === 'Space') return;
@@ -845,7 +822,7 @@ window.addEventListener('keydown', (e) => {
     if (!e.repeat && mode === 'play' && (sim.status === 'failed' || sim.status === 'out')) { loadLevel(levelIndex); return; }
     if (!e.repeat && canShoot() && !charging) { aimShown = true; charging = { by: 'space', started: performance.now() }; }
   }
-  if (e.key === 'Escape' && charging) { charging = null; charge = 0; placeGrip(0); showPower(0, true); }
+  if (e.key === 'Escape' && charging) { charging = null; charge = 0; showPower(0, true); }
 });
 window.addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
@@ -861,7 +838,7 @@ function updatePoolControls(dt: number, now: number) {
     const t = ((now - charging.started) % (CHARGE_MS * 2)) / CHARGE_MS;
     charge = t <= 1 ? t : 2 - t; // up to full, then back down
   }
-  if (charging) { showPower(charge, false); placeGrip(charge); }
+  if (charging) showPower(charge, false);
   if (!drag && !lesson) aim = (aimShown || charging) && canShoot() ? { angle: aimAngle, power: charge } : aim && drag ? aim : null;
 }
 
