@@ -26,7 +26,10 @@ void getJson<DailyNight>('/api/night').then((n) => {
 
 void getJson<NightStats>('/api/stats').then((s) => {
   if (!s || !s.players) return;
-  $('stats').textContent = `${s.players} bartender${s.players === 1 ? '' : 's'} tonight · ${Math.round(s.clearRate * 100)}% served everyone`;
+  const clears = Math.round(s.clearRate * s.players);
+  $('stats').textContent = s.players === 1
+    ? (clears ? '1 bartender has served everyone tonight' : '1 bartender has tried tonight')
+    : `${s.players} bartenders tonight · ${clears === 0 ? 'nobody has served everyone yet' : s.players < 10 ? `${clears} served everyone` : `${Math.round(s.clearRate * 100)}% served everyone`}`;
 });
 
 function play(e: MouseEvent) {

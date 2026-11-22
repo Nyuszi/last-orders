@@ -654,8 +654,17 @@ function showResult() {
     journey.end(sim.status === 'won', sim.tips);
     reportResult({ tries: currentTry(L.id), won: sim.status === 'won', pours: sim.shots.length, tips: sim.tips, help: helpUsed.has(L.id) }).then((st) => {
       if (!st || !st.players) return;
-      const parts = [`Tonight: ${st.players} ${st.players === 1 ? 'bartender' : 'bartenders'}`, `${Math.round(st.clearRate * 100)}% served everyone`];
-      if (st.avgTries) parts.push(`average ${st.avgTries.toFixed(1)} tries`);
+      // Read naturally with few players: no "1 bartender · 0% served everyone".
+      const clears = Math.round(st.clearRate * st.players);
+      const parts: string[] = [];
+      if (st.players === 1) parts.push("You're tonight's first bartender");
+      else {
+        parts.push(`${st.players} bartenders tonight`);
+        if (clears === 0) parts.push('nobody has served everyone yet');
+        else if (st.players < 10) parts.push(`${clears} served everyone`);
+        else parts.push(`${Math.round(st.clearRate * 100)}% served everyone`);
+      }
+      if (st.avgTries && clears >= 3) parts.push(`average ${st.avgTries.toFixed(1)} tries`);
       if (st.streak > 1) parts.push(`your streak: ${st.streak} nights`);
       $('r-stats').textContent = parts.join(' · ');
       $('r-stats').hidden = false;
