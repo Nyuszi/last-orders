@@ -10,7 +10,6 @@ import { CALENDAR_END, daysLeft, key, nightFor } from './nights';
 export const app = express();
 app.use(express.json({ limit: '64kb' }));
 app.use(createTelemetryRouter());
-
 const DAY_S = 86400;
 const KEEP_S = 30 * DAY_S; // per-player data is kept for 30 days, as the Devvit rules recommend
 
@@ -83,7 +82,11 @@ app.post('/api/share', async (req, res) => {
   const parent = (await redis.get(`pin:${date}`)) ?? context.postId;
   if (!parent) { res.status(400).json({ error: 'no post' }); return; }
   // Reddit markdown joins single newlines into one line; two trailing spaces force a line break.
-  const body = text.split('\n').map((l) => l.trimEnd()).join('  \n');
+  // Until the app is approved, Reddit posts "as the user" comments from the app account, so the
+  // comment names the player itself. Plain bold name, not u/name, so nobody gets a mention ping.
+  const name = context.username ?? (await reddit.getCurrentUsername().catch((e) => { console.error('getCurrentUsername failed', e); return undefined; }));  const lines = text.split('\n').map((l) => l.trimEnd());
+  if (name) lines.push(`— poured by **${name.replace(/[*_~`\\]/g, (c) => '\\' + c)}**`);
+  const body = lines.join('  \n');
   const comment = await reddit.submitComment({ id: parent as `t1_${string}` | `t3_${string}`, text: body, runAs: 'USER' });
   res.json({ ok: true, id: comment.id });
 });

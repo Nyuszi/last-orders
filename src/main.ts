@@ -576,11 +576,12 @@ function nearMiss(): string | null {
 }
 
 // ---------------- Result card ----------------
-const RESULT_ICON: Record<string, string> = { perfect: '⭐', served: '🍺', trick: '🎱', miss: '▫️', spill: '💦', smash: '💥' };
+// A miss used to be ▫️, which looks like a broken character in Reddit comments.
+const RESULT_ICON: Record<string, string> = { perfect: '⭐', served: '🍺', trick: '🎱', miss: '❌', spill: '💦', smash: '💥' };
 
 function shareText(): string {
   const L = sim.level;
-  const icons = sim.pourResults.map((r) => RESULT_ICON[r] ?? '▫️').join('');
+  const icons = sim.pourResults.map((r) => RESULT_ICON[r] ?? '❌').join('');
   const par = L.orders.length;
   const lines = [`LAST ORDERS · Night ${L.night} · ${L.title}`, `${icons}  Served ${sim.servedCount}/${L.orders.length} · ${sim.shots.length} pours (par ${par}) · Tips ${sim.tips}¢`];
   // (A walk-out shows up through the "Sheriff walked out" badge on the next line.)
