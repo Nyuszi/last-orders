@@ -489,16 +489,18 @@ function updateHud() {
     add(o.cancelled ? `${i + 1} ✕` : o.served ? `${i + 1} ✓` : `${i + 1}`, `${o.served || o.cancelled ? 'chip-done' : 'chip-order'} chip-step`);
     (chips.lastElementChild as HTMLElement).title = o.cancelled ? `${full} (left)` : o.served ? `${full} (served)` : full;
   });
-  if (level.props.some((p) => p.kind === 'hat') && !sim.left.has('sheriff')) add(sim.hatWarned ? 'Hat: last warning!' : 'Hat: hands off', 'chip-danger');
-  if (level.bonus) add('Bonus: peanuts', `chip-bonus${sim.badges.has('Peanuts for Pete') ? ' got' : ''}`);
-  if (level.props.some((p) => p.kind === 'cards')) add('Bonus: cards', `chip-bonus${sim.badges.has('Cheat exposed') ? ' got' : ''}`);
+  // Phones get short chips so the orders fit on one row.
+  const short = matchMedia('(max-width: 520px)').matches;
+  if (level.props.some((p) => p.kind === 'hat') && !sim.left.has('sheriff')) add(sim.hatWarned ? (short ? '⚠ Hat: last warning' : 'Hat: last warning!') : (short ? '⚠ Hat' : 'Hat: hands off'), 'chip-danger');
+  if (level.bonus) add(short ? '★ Peanuts' : 'Bonus: peanuts', `chip-bonus${sim.badges.has('Peanuts for Pete') ? ' got' : ''}`);
+  if (level.props.some((p) => p.kind === 'cards')) add(short ? '★ Cards' : 'Bonus: cards', `chip-bonus${sim.badges.has('Cheat exposed') ? ' got' : ''}`);
 
   const pours = $('bottles');
   pours.innerHTML = '';
   const nextDrink = next >= 0 ? sim.orders[next].drink : 'water';
   for (let i = 0; i < level.pours; i++) {
     const result = sim.pourResults[i];
-    const fill = result ? (result === 'served' || result === 'perfect' || result === 'trick' ? '#d9a441' : '#7a3a2a') : i === sim.shots.length ? DRINK_COLOR[nextDrink] : '#3a2a20';
+    const fill = result ? (result === 'served' || result === 'perfect' || result === 'trick' ? '#d9a441' : result === 'peanuts' || result === 'cards' ? '#6dbb4a' : '#7a3a2a') : i === sim.shots.length ? DRINK_COLOR[nextDrink] : '#3a2a20';
     pours.insertAdjacentHTML('beforeend', pixelGlass(fill));
   }
   pours.setAttribute('aria-label', `${sim.poursLeft} of ${level.pours} pours left`);
@@ -515,16 +517,29 @@ const stage = $('stage');
 // height first and the side column (min LANDSCAPE_SIDE px) gets whatever width is left.
 const landscape = matchMedia('(min-width: 600px) and (min-aspect-ratio: 1/1)');
 const LANDSCAPE_SIDE = 220;
+// Phones: the pull meter moves into the bottom bar, and the bar may lose up to FLOOR_CROP world
+// units of empty floor on each side (nobody stands there) so it can fill the height.
+const phone = matchMedia('(max-width: 520px)');
+const FLOOR_CROP = 30;
+function placeMeter() {
+  const pw = $('power'), controls = document.querySelector('.controls')!;
+  if (phone.matches) { if (pw.parentElement !== controls) controls.insertBefore(pw, $('spin-toggle')); }
+  else if (pw.parentElement !== stage) stage.insertBefore(pw, board);
+}
 function fit() {
+  placeMeter();
   const s = stage.getBoundingClientRect(), cs = getComputedStyle(stage);
   const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
   const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-  const meter = $('power').getBoundingClientRect().width + parseFloat(cs.columnGap || '0');
+  const pw = $('power');
+  const meter = pw.parentElement === stage ? pw.getBoundingClientRect().width + parseFloat(cs.columnGap || '0') : 0;
   const width = landscape.matches ? document.documentElement.clientWidth - LANDSCAPE_SIDE - 12 : s.width;
   // Desktop: size from the window height, not the stage (the bar itself would hold the stage open
   // when the window shrinks).
-  const height = landscape.matches ? document.documentElement.clientHeight - padY : s.height - padY - 6;
-  renderer.resize(Math.max(100, width - padX - meter - 6), Math.max(100, height));
+  const height = landscape.matches ? document.documentElement.clientHeight - padY : s.height - padY - (phone.matches ? 0 : 6);
+  let w = width - padX - meter - 6;
+  if (phone.matches) w = (w * W) / (W - 2 * FLOOR_CROP); // the board clips the empty floor edges
+  renderer.resize(Math.max(100, w), Math.max(100, height));
   // Keep the item labels on their items when the bar is resized (the hand follows by itself).
   const h = document.getElementById('howto');
   if (h && !h.hidden) requestAnimationFrame(() => placeTags());
@@ -871,7 +886,7 @@ function nearMiss(): string | null {
 
 // ---------------- Result card ----------------
 // A miss used to be ▫️, which looks like a broken character in Reddit comments.
-const RESULT_ICON: Record<string, string> = { perfect: '⭐', served: '🍺', trick: '🎱', miss: '❌', spill: '💦', smash: '💥' };
+const RESULT_ICON: Record<string, string> = { perfect: '⭐', served: '🍺', trick: '🎱', peanuts: '🥜', cards: '🃏', miss: '❌', spill: '💦', smash: '💥' };
 
 function shareText(): string {
   const L = sim.level;

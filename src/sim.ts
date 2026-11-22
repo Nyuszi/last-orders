@@ -104,6 +104,8 @@ export class Sim {
   events: SimEvent[] = [];
   /** What happened to each pour, for the share card: 'served' | 'perfect' | 'miss' | 'spill' | 'smash'. */
   pourResults: string[] = [];
+  /** A bonus (peanuts, cards) earned by the pour now rolling, so it isn't recorded as a miss. */
+  private bonusThisPour: '' | 'peanuts' | 'cards' = '';
 
   private tags = new Map<number, Tag>();
   private hits: QueuedHit[] = [];
@@ -426,6 +428,7 @@ export class Sim {
       this.walkOut(prop.owner);
     } else {
       prop.touched = true;
+      this.bonusThisPour = 'cards';
       this.badges.add('Cheat exposed');
       this.say(prop.owner, NPCS[prop.owner].lines.bonus ?? 'Hey!');
       const p = prop.body?.position ?? { x: prop.x, y: prop.y };
@@ -589,25 +592,29 @@ export class Sim {
       this.say(o.owner, trick ? 'Well, I\'ll be!' : quality === 3 ? NPCS[o.owner].lines.perfect : NPCS[o.owner].lines.served);
       this.events.push({ t: 'served', x: o.x, y: o.y, quality, tip: o.tip, owner: o.owner, trick });
     }
+    // Peanuts first, so a pour that only pushes the bowl into Pete's spot counts as a bonus
+    // pour, not a miss.
+    const bonus = this.level.bonus;
+    if (bonus && this.bowl && !this.badges.has('Peanuts for Pete')) {
+      if (Math.hypot(this.bowl.position.x - bonus.x, this.bowl.position.y - bonus.y) < bonus.r) {
+        this.badges.add('Peanuts for Pete');
+        this.bonusThisPour = 'peanuts';
+        this.say('pete', NPCS.pete.lines.bonus);
+        this.events.push({ t: 'bonus', kind: 'peanuts', x: bonus.x, y: bonus.y });
+      }
+    }
     if (pour) {
       if (pour.tipped) this.pourResults.push(pour.floor ? 'smash' : 'spill');
       else if (pour.role === 'served') this.pourResults.push(this.orders[pour.order].quality === 3 ? 'perfect' : 'served');
       else if (trickThisPour) this.pourResults.push('trick');
+      else if (this.bonusThisPour) this.pourResults.push(this.bonusThisPour);
       else {
         this.pourResults.push('miss');
         const o = this.orders[pour.order];
         if (!o.served) this.say(o.owner, NPCS[o.owner].lines.miss ?? 'Closer!');
       }
     }
-
-    const bonus = this.level.bonus;
-    if (bonus && this.bowl && !this.badges.has('Peanuts for Pete')) {
-      if (Math.hypot(this.bowl.position.x - bonus.x, this.bowl.position.y - bonus.y) < bonus.r) {
-        this.badges.add('Peanuts for Pete');
-        this.say('pete', NPCS.pete.lines.bonus);
-        this.events.push({ t: 'bonus', kind: 'peanuts', x: bonus.x, y: bonus.y });
-      }
-    }
+    this.bonusThisPour = '';
     this.events.push({ t: 'settled' });
 
     if (this.nextOrder < 0) {

@@ -398,3 +398,33 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   .spin { display: flex; }
   .spin-toggle { display: none; }
 }
+
+/* ---------- Phones: last in the file. Every pixel of height and width to the bar ---------- */
+@media (max-width: 520px) {
+  /* Header on one line: smaller title, smaller night buttons. */
+  .top { padding: 4px 6px 3px; gap: 6px; flex-wrap: nowrap; }
+  .brand { font-size: 13px; white-space: nowrap; text-shadow: 2px 2px 0 var(--ink); }
+  .sub { font-size: 7px; white-space: nowrap; }
+  .top-right, .nights { gap: 3px; }
+  .nights button { min-width: 24px; height: 26px; font-size: 11px; }
+  .nights button.today { padding: 0 6px; font-size: 10px; }
+  .help-btn { min-width: 26px; height: 26px; font-size: 12px; }
+  /* Orders in one compact row: no label row (pours show at the bottom). */
+  .brief { margin: 0 4px; padding: 4px 6px; }
+  .brief .label { display: none; }
+  .chips { margin-top: 0; }
+  /* The bar gets the whole stage. The empty floor at its far left and right may run off the
+     screen (main.ts crops it), so the bar can fill the height. */
+  .stage { padding: 0; gap: 0; }
+  .board { overflow: hidden; }
+  #game { border-top-width: 0; border-bottom-width: 0; }
+  /* The pull meter moves into the bottom bar as a horizontal strip (main.ts moves it there).
+     It's a read-out on phones: you pull on the bar itself. */
+  .controls .power { flex: 1 1 auto; min-width: 0; flex-direction: row; gap: 5px; pointer-events: none; }
+  .controls .power-label, .controls .power-grip { display: none; }
+  .controls .power-track { flex: 1 1 auto; min-width: 0; }
+  .controls .power-meter { flex-direction: row; width: auto; height: 16px; padding: 2px; gap: 2px; }
+  .controls .power-meter i { height: auto; flex: 1 1 0; }
+  .controls .power-val { font-size: 9px; min-width: 4ch; }
+  .controls { margin: 0 4px calc(4px + env(safe-area-inset-bottom)); }
+}
