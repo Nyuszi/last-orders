@@ -281,6 +281,62 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   .board { flex: 0 0 auto; }
 }
 
+/* How to play: a dimmed layer over the bar when a night loads. It catches the first tap, so it
+   can never fire a drink. Intro text on top, the demo in the middle, "tap to start" below. */
+.howto {
+  position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  padding: 10px 10px 14px; background: #0d070440; cursor: pointer; touch-action: none;
+}
+.howto[hidden] { display: none; }
+.howto-text, .howto-tap { position: relative; z-index: 3; }
+.howto-text {
+  margin: 0; max-width: 320px; padding: 8px 12px; background: var(--ink); border: 3px solid var(--line); box-shadow: 3px 3px 0 #000;
+  font-size: 14px; line-height: 1.3; color: var(--cream); text-align: center;
+}
+.howto-tap {
+  margin: 0; padding: 8px 14px; background: var(--brass); color: var(--ink); border: 3px solid var(--ink); box-shadow: 3px 3px 0 #000;
+  font-family: var(--head); font-weight: 700; font-size: 13px; animation: howto-blink 1.2s steps(2) infinite;
+}
+@keyframes howto-blink { 50% { filter: brightness(1.25); } }
+
+/* The demo hand: placed by main.ts at the point it is dragging, in step with the real aim
+   guideline the game draws. Its fingertip is the drag point. */
+.ghost { position: absolute; width: 0; height: 0; pointer-events: none; z-index: 2; }
+.ghost[hidden] { display: none; }
+.ghost-hand { position: absolute; left: 0; top: 0; transform: translate(-40%, -4px); display: flex; flex-direction: column; align-items: center; }
+.ghost-hand svg { display: block; filter: drop-shadow(2px 2px 0 #000a); }
+.ghost-label {
+  margin-top: 4px; padding: 2px 6px; white-space: nowrap; background: var(--ink); border: 2px solid var(--line);
+  font-family: var(--head); font-size: 10px; color: var(--cream);
+}
+
+/* Item labels on the bar during the intro: what each thing does. */
+.howto-tags { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.tag {
+  position: absolute; transform: translate(-50%, calc(-100% - 7px)); padding: 2px 5px; white-space: nowrap;
+  background: var(--ink); color: var(--cream); border: 2px solid var(--amber); box-shadow: 2px 2px 0 #000;
+  font-family: var(--head); font-size: 9px; line-height: 1.2;
+}
+.tag::after {
+  content: ''; position: absolute; left: var(--arrow, 50%); bottom: -7px; margin-left: -5px;
+  border: 5px solid transparent; border-top-color: var(--amber); border-bottom: 0;
+}
+.tag.danger { border-color: var(--danger); color: #ffd2c4; }
+.tag.danger::after { border-top-color: var(--danger); }
+.tag.good { border-color: var(--green); }
+.tag.good::after { border-top-color: var(--green); }
+/* A pulsing ring on the item itself. */
+.tag-ring {
+  position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border: 2px dashed var(--amber);
+  border-radius: 50%; animation: tag-pulse 1.1s steps(4) infinite;
+}
+.tag-ring.danger { border-color: var(--danger); }
+.tag-ring.good { border-color: var(--green); }
+@keyframes tag-pulse { 50% { transform: scale(1.25); opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) {
+  .howto-tap, .tag-ring { animation: none; }
+}
+
 /* Cut-in band colour by mood */
 .cutin.mood-happy .cutin-band::before { background: repeating-linear-gradient(-8deg, transparent 0 7px, #f2b53a55 7px 9px), linear-gradient(90deg, #5a3e10, #8a6216 60%, #5a3e10); }
 .cutin.mood-surprised .cutin-band::before { background: repeating-linear-gradient(-8deg, transparent 0 7px, #7cc2f055 7px 9px), linear-gradient(90deg, #102a44, #18406a 60%, #102a44); }

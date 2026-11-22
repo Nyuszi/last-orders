@@ -45,6 +45,20 @@
           <p class="cutin-bubble"><span id="cutin-name"></span><strong id="cutin-line"></strong></p>
         </div>
       </div>
+      <!-- How to play: shown when a night loads. Blocks the bar until tapped, so nothing fires by accident. -->
+      <div class="howto" id="howto" hidden role="dialog" aria-label="How to play">
+        <p class="howto-text" id="howto-text"></p>
+        <div class="howto-tags" id="howto-tags" aria-hidden="true"></div>
+        <div class="ghost" id="ghost" aria-hidden="true" hidden>
+          <span class="ghost-hand">
+            <svg viewBox="0 0 12 16" width="30" height="40" shape-rendering="crispEdges">
+              <rect x="3" y="0" width="4" height="9" fill="#1a0f0a"/><rect x="0" y="6" width="12" height="10" fill="#1a0f0a"/>
+              <rect x="1" y="7" width="10" height="8" fill="#f3d2b0"/><rect x="4" y="1" width="2" height="7" fill="#f3d2b0"/>
+              <rect x="4" y="1" width="1" height="6" fill="#fff4e4"/><rect x="7" y="9" width="1" height="2" fill="#c99a78"/><rect x="9" y="9" width="1" height="2" fill="#c99a78"/>
+            </svg>          </span>
+        </div>
+        <p class="howto-tap">Tap anywhere to start</p>
+      </div>
       <canvas id="game" aria-label="The bar, seen from above. Drag back anywhere and release to slide the drink to the customer."></canvas>
     </div>
   </div>

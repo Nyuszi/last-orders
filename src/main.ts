@@ -1,6 +1,6 @@
 import { LEVELS, NPCS, type Level, type NpcId } from './levels';
 import { Renderer, W, H, type Aim } from './render';
-import { Sim, STEP_MS, pointInPoly, type Shot, type Status } from './sim';
+import { Sim, STEP_MS, pointInPoly, type Shot, type SimEvent, type Status } from './sim';
 import { SOLUTIONS } from './solutions';
 import { fetchNight, requestedDate } from './daily';
 import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';// Every portrait in assets/portraits is picked up automatically, keyed by its file name
@@ -33,6 +33,8 @@ let lastStatus: Status = 'aiming';
 let resultTimer = 0;
 let shownHint = '';
 let hintTimer = 0;
+/** The night's intro text is up and the next tap on the bar only closes it. */
+let introOpen = false;
 let replayKind: 'REPLAY' | 'SOLUTION' = 'REPLAY';
 // After release a small direction arrow rides ahead of the drink for about half a second.
 // (There used to be a slow-motion start here. Handing back to full speed made the drink look
@@ -195,7 +197,14 @@ function loadLevel(i: number, asReplay = false, kind: 'REPLAY' | 'SOLUTION' = 'R
   $('par').textContent = `${level.pours} POURS`;
   shownHint = '';
   const narrow = matchMedia('(max-width: 520px)').matches;
-  setHint(!asReplay ? (narrow ? `${level.blurb} ${level.hint}` : level.hint) : kind === 'SOLUTION' ? "Here's one way to serve everyone. Watch the power and spin." : 'Replaying your night: same numbers per pour, same result.');
+  if (!asReplay) {
+    $('hint').classList.add('fade');
+    showHowto(narrow ? `${level.blurb} ${level.hint}` : level.hint, currentTry(level.id) <= 1);
+  } else {
+    closeIntro();
+    setHint(kind === 'SOLUTION' ? "Here's one way to serve everyone. Watch the power and spin." : 'Replaying your night: same numbers per pour, same result.');
+  }
+  void narrow;
   renderNights();
   updateHud();
 }
@@ -208,6 +217,207 @@ function setHint(text: string) {
   el.classList.remove('fade');
   clearTimeout(hintTimer);
   hintTimer = window.setTimeout(() => el.classList.add('fade'), 7000);
+}
+
+// ---------------- How to play overlay: shown when a night loads ----------------
+// It sits over the bar and takes the first tap, so nothing is poured before you've read it.
+// Underneath, the real game plays a demo pour on a throwaway copy of tonight's bar: the hand
+// pulls back, the real aim guideline appears, the drink slides into one of the bar's items.
+// Labels say what each item does. The demo only plays on the first try of a night.
+let wantDemo = false;
+type DemoShot = { angle: number; power: number };
+let demo: null | {
+  sim: Sim; acc: number; shots: DemoShot[]; i: number; from: number;
+  phaseAt: number; fired: boolean; settledAt: number;
+} = null;
+// Each demo pour: press and pull a little, sweep the aim to the target (so you see aiming),
+// pull to full strength, hold, let go. Then wait for the drink to stop before the next pour.
+const DEMO_START_MS = 500, DEMO_PRESS_MS = 450, DEMO_SWEEP_MS = 1100, DEMO_PULL_MS = 700, DEMO_HOLD_MS = 550;
+const DEMO_BETWEEN_MS = 500, DEMO_AFTER_MS = 1400, DEMO_MAX_ROLL_MS = 5000;
+/** Only physical effects show during the demo: no speech bubbles, tips or bonus pop-ups. */
+const DEMO_EVENTS = new Set<SimEvent['t']>(['tip', 'smash', 'thud', 'contact', 'bank', 'slam', 'settled']);
+
+function showHowto(text: string, withDemo: boolean) {
+  $('howto-text').textContent = text;
+  $('howto').hidden = false;
+  introOpen = true;
+  wantDemo = withDemo;
+  demo = null;
+  $('ghost').hidden = true;
+  requestAnimationFrame(placeTags);
+}
+function closeIntro() {
+  const wasDemo = !!demo;
+  introOpen = false;
+  wantDemo = false;
+  demo = null;
+  $('howto').hidden = true;
+  $('ghost').hidden = true;
+  // Clear the demo's splashes and bubbles; the real bar is untouched.
+  if (wasDemo) renderer.reset();
+}
+$('howto').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); closeIntro(); });
+
+const toScreen = (x: number, y: number) => {
+  const c = canvas.getBoundingClientRect(), b = board.getBoundingClientRect();
+  return { x: c.left - b.left + (x / W) * c.width, y: c.top - b.top + (y / H) * c.height };
+};
+
+/** What the demo aims at: an item it can bump, so you see that hitting things is allowed. */
+type DemoTarget = { x: number; y: number; label: string };
+function demoTarget(level: Level): DemoTarget {
+  // A bonus item (peanuts, cards) if there is one, else an old drink; the nearest of those, so
+  // the demo is short and the hit is easy to see.
+  const s = level.start;
+  const near = (a: DemoTarget, b: DemoTarget) => Math.hypot(a.x - s.x, a.y - s.y) - Math.hypot(b.x - s.x, b.y - s.y);
+  const bonus: DemoTarget[] = [
+    ...(level.bowl ? [{ x: level.bowl.x, y: level.bowl.y, label: 'Peanuts: hit them for a bonus' }] : []),
+    ...level.props.filter((p) => p.kind === 'cards').map((p) => ({ x: p.x, y: p.y, label: 'Cards: hit them for a bonus' })),
+  ].sort(near);
+  const old = level.glasses.map((g) => ({ x: g.x, y: g.y, label: 'Old drink: knock it in = trick shot' })).sort(near);
+  const items = bonus.length ? bonus : old;
+  // No item at all: a bank shot off the left rail, about a third of the way up.
+  return items[0] ?? { x: level.counter.x, y: s.y - level.counter.h * 0.35, label: 'Gold rail: bounces' };
+}
+function aimAt(level: Level, t: { x: number; y: number }): DemoShot {
+  const s = level.start;
+  const dx = t.x - s.x, dy = t.y - s.y;
+  return { angle: Math.atan2(dy, dx), power: Math.max(0.35, Math.min(0.8, 0.2 + Math.hypot(dx, dy) / 600)) };
+}
+/** Two pours: into the bonus item, then the aim swings to the other side, at the first circle. */
+function demoShots(level: Level): DemoShot[] {
+  const s = level.start, item = demoTarget(level);
+  const itemSide = Math.sign(item.x - s.x) || -1;
+  const other = level.orders.find((o) => Math.sign(o.x - s.x) === -itemSide)
+    ?? { x: s.x - itemSide * level.counter.w * 0.3, y: item.y };
+  return [aimAt(level, item), aimAt(level, other)];
+}
+
+function runDemo(now: number, dt: number) {
+  const level = sim.level;
+  if (!demo) {
+    renderer.reset();
+    demo = { sim: new Sim(level), acc: 0, shots: demoShots(level), i: 0, from: -Math.PI / 2, phaseAt: now + DEMO_START_MS, fired: false, settledAt: 0 };
+  }
+  const d = demo;
+  let a: Aim | null = null;
+  const shot = d.shots[d.i];
+  if (shot && !d.fired) {
+    const t = now - d.phaseAt;
+    if (t >= 0) {
+      // Press and pull a little at the old aim, sweep to the new aim, pull to full, hold.
+      const ease = (k: number) => 1 - (1 - Math.min(1, Math.max(0, k))) ** 2;
+      const k1 = ease(t / DEMO_PRESS_MS);
+      const k2 = ease((t - DEMO_PRESS_MS) / DEMO_SWEEP_MS);
+      const k3 = ease((t - DEMO_PRESS_MS - DEMO_SWEEP_MS) / DEMO_PULL_MS);
+      const turn = Math.atan2(Math.sin(shot.angle - d.from), Math.cos(shot.angle - d.from));
+      const angle = d.from + turn * k2;
+      const power = 0.25 * shot.power * k1 + 0.75 * shot.power * k3;
+      a = { angle, power };
+      placeHand(angle, power / 0.8);
+      if (t > DEMO_PRESS_MS + DEMO_SWEEP_MS + DEMO_PULL_MS + DEMO_HOLD_MS) {
+        d.sim.fire(shot.angle, shot.power, 0);
+        d.fired = true;
+        d.settledAt = 0;
+        d.phaseAt = now;
+        $('ghost').hidden = true;
+      }
+    }
+  }
+  // Run the copy's physics at the game's fixed step. Only physical effects reach the screen.
+  d.acc += dt;
+  for (let n = 0; d.acc >= STEP_MS && n < 6; n++, d.acc -= STEP_MS) {
+    d.sim.step();
+    for (const ev of d.sim.events) if (DEMO_EVENTS.has(ev.t)) renderer.handle(ev, d.sim);
+    d.sim.events = [];
+  }
+  if (d.fired && !d.settledAt && ((d.sim.status !== 'rolling' && now - d.phaseAt > 500) || now - d.phaseAt > DEMO_MAX_ROLL_MS)) d.settledAt = now;
+  if (d.fired && d.settledAt) {
+    const last = d.i >= d.shots.length - 1;
+    if (now - d.settledAt > (last ? DEMO_AFTER_MS : DEMO_BETWEEN_MS)) {
+      if (last || d.sim.status !== 'aiming') demo = null; // loop from the start
+      else { d.from = shot.angle; d.i++; d.fired = false; d.phaseAt = now; }
+    }
+  }
+  renderer.draw(d.sim, a, false, 0);
+}
+
+/** The hand presses on the upper bar and pulls back, opposite to the aim, as far as the pull. */
+function placeHand(angle: number, pull: number) {
+  const s = sim.level.start;
+  const press = { x: s.x, y: s.y - 230 };
+  const reach = 110 * pull; // world units on screen; the real pull for this power is longer
+  const p = toScreen(press.x - Math.cos(angle) * reach, press.y - Math.sin(angle) * reach);
+  const g = $('ghost');
+  g.style.left = `${p.x}px`;
+  g.style.top = `${p.y}px`;
+  g.hidden = false;
+}
+
+/** Labels on the things on tonight's bar, so it's clear what you may hit and what not. */
+function placeTags() {
+  const box = $('howto-tags');
+  box.innerHTML = '';
+  if ($('howto').hidden) return;
+  const L = sim.level, c = L.counter;
+  const tags: { x: number; y: number; text: string; tone: '' | 'danger' | 'good'; ring?: boolean }[] = [];
+  const o = L.orders[0];
+  if (o) tags.push({ x: o.x, y: o.y, text: 'Stop the drink in its circle', tone: 'good', ring: true });
+  const hat = L.props.find((p) => p.kind === 'hat');
+  if (hat) tags.push({ x: hat.x, y: hat.y, text: "Sheriff's hat: don't touch", tone: 'danger', ring: true });
+  // One "OK to hit" item: the one the demo pour aims at.
+  const target = demoTarget(L);
+  tags.push({ x: target.x, y: target.y, text: target.label, tone: '', ring: !target.label.startsWith('Gold') });
+  // The first gap in a side rail: drinks fall off there.
+  for (const side of ['left', 'right'] as const) {
+    const segs = L.rails.filter((r) => r.side === side).sort((a, b) => a.from - b.from);
+    let y = c.y, gap: number | null = null;
+    for (const r of segs) { if (r.from - y > 30) { gap = (y + r.from) / 2; break; } y = Math.max(y, r.to); }
+    if (gap === null && c.y + c.h - y > 30) gap = (y + c.y + c.h) / 2;
+    if (gap !== null) { tags.push({ x: side === 'left' ? c.x : c.x + c.w, y: gap, text: 'No rail: it falls off', tone: 'danger' }); break; }
+  }
+  // Then the night's special hazard, if any, and one rail type: at most five labels in all.
+  if (L.arm) tags.push({ x: c.x + c.w / 2, y: L.arm.y, text: "Pete's arm: time it", tone: 'danger' });
+  else if (L.posts[0]) tags.push({ x: L.posts[0].x, y: L.posts[0].y, text: L.posts[0].kind === 'tap' ? 'Beer tap: spills a drink' : 'Tip jar: spills a drink', tone: 'danger', ring: true });
+  const timber = L.rails.find((r) => (r.side === 'left' || r.side === 'right') && r.type === 'timber');
+  const brass = L.rails.find((r) => (r.side === 'left' || r.side === 'right') && r.type === 'brass');
+  // A rail label goes at the point along its rail furthest from every other label.
+  const railTag = (r: (typeof L.rails)[number], text: string) => {
+    const x = r.side === 'left' ? c.x : c.x + c.w;
+    let best = (r.from + r.to) / 2, bestGap = -1;
+    for (let k = 1; k < 12; k++) {
+      const y = r.from + ((r.to - r.from) * k) / 12;
+      const gap = Math.min(...tags.map((t) => Math.hypot((t.x - x) * 0.5, t.y - y)), 1e9);
+      if (gap > bestGap) { bestGap = gap; best = y; }
+    }
+    tags.push({ x, y: best, text, tone: '' });
+  };
+  if (timber) railTag(timber, 'Dark rail: stops it dead');
+  else if (brass && !target.label.startsWith('Gold')) railTag(brass, 'Gold rail: bounces');
+
+  const bw = box.clientWidth;
+  const placed: { x: number; y: number }[] = [];
+  for (const t of tags.slice(0, 5)) {
+    const p = toScreen(t.x, t.y);
+    if (t.ring) {
+      const r = document.createElement('span');
+      r.className = `tag-ring ${t.tone}`;
+      r.style.left = `${p.x}px`; r.style.top = `${p.y}px`;
+      box.appendChild(r);
+    }
+    const el = document.createElement('span');
+    el.className = `tag ${t.tone}`;
+    el.textContent = t.text;
+    box.appendChild(el);
+    // Keep labels inside the bar area and off each other: nudge up if one is already close.
+    let y = p.y - (t.ring ? 12 : 0);
+    while (placed.some((q) => Math.abs(q.y - y) < 20 && Math.abs(q.x - p.x) < 120)) y -= 20;
+    const w = el.offsetWidth;
+    const x = Math.max(w / 2 + 2, Math.min(bw - w / 2 - 2, p.x));
+    el.style.left = `${x}px`; el.style.top = `${y}px`;
+    el.style.setProperty('--arrow', `${Math.max(8, Math.min(w - 8, w / 2 + (p.x - x)))}px`);
+    placed.push({ x, y });
+  }
 }
 
 function renderNights() {
@@ -249,7 +459,7 @@ function updateHud() {
     if (o.cancelled) { add(`${text} · left`, 'chip-done'); return; }
     add(o.served ? `${text} ✓` : text, o.served ? 'chip-done' : i === next ? 'chip-target' : 'chip-order');
   });
-  if (level.props.some((p) => p.kind === 'hat') && !sim.left.has('sheriff')) add('Hands off the hat', 'chip-danger');
+  if (level.props.some((p) => p.kind === 'hat') && !sim.left.has('sheriff')) add(sim.hatWarned ? 'Last warning: the hat!' : 'Hands off the hat', 'chip-danger');
   if (level.bonus) add('Bonus: peanuts', `chip-bonus${sim.badges.has('Peanuts for Pete') ? ' got' : ''}`);
   if (level.props.some((p) => p.kind === 'cards')) add('Bonus: cards', `chip-bonus${sim.badges.has('Cheat exposed') ? ' got' : ''}`);
 
@@ -282,6 +492,9 @@ function fit() {
   const meter = $('power').getBoundingClientRect().width + parseFloat(cs.columnGap || '0');
   const width = landscape.matches ? document.documentElement.clientWidth - LANDSCAPE_SIDE - 12 : s.width;
   renderer.resize(Math.max(100, width - padX - meter - 6), Math.max(100, s.height - padY - 6));
+  // Keep the item labels on their items when the bar is resized (the hand follows by itself).
+  const h = document.getElementById('howto');
+  if (h && !h.hidden) requestAnimationFrame(() => placeTags());
 }
 new ResizeObserver(fit).observe(stage);
 addEventListener('resize', fit);
@@ -426,14 +639,25 @@ function toWorld(e: PointerEvent) {
   return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
 }
 
+// Tuned after playtesting on phones ("too sensitive"): a longer pull for full power, a dead
+// zone at the start that also works as "cancel" (slide back and let go), and a smoothed
+// direction so a wobbling finger doesn't swing the aim.
+const FULL_PULL = 240; // world units of drag for full power (was 150)
+const DEAD_ZONE = 24; // pull shorter than this: no aim yet, and letting go here cancels
+const AIM_SMOOTHING = 0.45; // share of each finger move the aim follows (1 = no smoothing)
+let smoothAngle: number | null = null;
+
 canvas.addEventListener('pointerdown', (e) => {
   if (mode !== 'play' || sim.status !== 'aiming' || sim.poursLeft <= 0) return;
+  // The first tap of a night only closes the intro, so nobody pours blind under the text.
+  if (introOpen) { closeIntro(); return; }
   canvas.setPointerCapture(e.pointerId);
   $('hint').classList.add('fade');
   tipEl.hidden = true;
   const p = toWorld(e);
   drag = { x0: p.x, y0: p.y };
   aim = null;
+  smoothAngle = null;
   showPower(0, false);
 });
 
@@ -442,16 +666,36 @@ canvas.addEventListener('pointermove', (e) => {
   const p = toWorld(e);
   const dx = drag.x0 - p.x, dy = drag.y0 - p.y;
   const len = Math.hypot(dx, dy);
-  if (len < 6) { aim = null; showPower(0, false); return; }
-  aim = { angle: Math.atan2(dy, dx), power: Math.min(1, len / 150) };
+  if (len < DEAD_ZONE) {
+    if (aim) pullHint('Let go here to cancel');
+    aim = null; showPower(0, false); return;
+  }
+  const target = Math.atan2(dy, dx);
+  if (smoothAngle === null) smoothAngle = target;
+  else {
+    const d = Math.atan2(Math.sin(target - smoothAngle), Math.cos(target - smoothAngle));
+    smoothAngle += d * AIM_SMOOTHING;
+  }
+  aim = { angle: smoothAngle, power: Math.min(1, (len - DEAD_ZONE) / (FULL_PULL - DEAD_ZONE)) };
   aimAngle = clampAngle(aim.angle);
   showPower(aim.power, false);
+  pullHint('Let go to pour · slide back to cancel');
 });
+
+/** A short line at the top of the bar while you pull (not the intro, which is closed by now). */
+function pullHint(text: string) {
+  const el = $('hint');
+  if (el.textContent !== text) el.textContent = text;
+  el.classList.remove('fade');
+  shownHint = text;
+  clearTimeout(hintTimer);
+}
 
 let lastAimed = false;
 function endDrag() {
   lastAimed = !!aim;
-  if (drag && aim && aim.power > 0.06 && sim.status === 'aiming') {
+  if (drag) $('hint').classList.add('fade');
+  if (drag && aim && aim.power > 0.02 && sim.status === 'aiming') {
     if (sim.fire(aim.angle, aim.power, spin)) {
       recorded = [...sim.shots];
       slowSteps = SLOW_STEPS;
@@ -467,7 +711,7 @@ function endDrag() {
 }
 canvas.addEventListener('pointerup', endDrag);
 canvas.addEventListener('pointerup', (e) => { if (!lastAimed) showTip(e, true); });
-canvas.addEventListener('pointercancel', () => { drag = null; aim = null; });
+canvas.addEventListener('pointercancel', () => { drag = null; aim = null; showPower(0, true); $('hint').classList.add('fade'); });
 
 // ---------------- Pool-style controls: Q/E to aim, pull to shoot ----------------
 // Like 8 Ball Pool: turn the aim with Q and E (hold Shift for fine aim), then either hold
@@ -512,6 +756,7 @@ function placeGrip(p: number) {
 }
 $('power').addEventListener('pointerdown', (e) => {
   if (!canShoot()) return;
+  if (introOpen) closeIntro();
   $('power').setPointerCapture(e.pointerId);
   aimShown = true;
   charging = { by: 'handle', y0: e.clientY, height: meter.getBoundingClientRect().height };
@@ -527,6 +772,7 @@ $('power').addEventListener('pointercancel', () => { if (charging?.by === 'handl
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|BUTTON)$/.test(e.target.tagName) && e.code === 'Space') return;
   const k = e.key.toLowerCase();
+  if ((k === 'q' || k === 'e' || e.code === 'Space') && mode === 'play') { if (introOpen) closeIntro(); }
   if (k === 'q' || k === 'e') { turning = k === 'q' ? -1 : 1; aimShown = true; fine = e.shiftKey; e.preventDefault(); }
   if (e.key === 'Shift') fine = true;
   if (e.code === 'Space') {
@@ -746,6 +992,12 @@ function frame(now: number) {
   const dt = Math.min(100, now - last);
   last = now;
   updatePoolControls(dt, now);
+  // While the how-to overlay is up on a first try, the bar shows the demo pour instead.
+  if (introOpen && wantDemo && mode === 'play') {
+    runDemo(now, dt);
+    requestAnimationFrame(frame);
+    return;
+  }
   // During a lesson's explanation, hold the bar still and animate the hand instead.
   if (lesson) {
     const shot = replayShots[lesson.shot];
@@ -793,6 +1045,7 @@ function frame(now: number) {
       renderer.handle(ev, sim);
       // Big moments get a portrait cut-in; everything else stays in the small speech bubbles.
       if (ev.t === 'leave' && ev.npc === 'sheriff') cutIn('sheriff', 'angry', "MY HAT! That's it, I'm leaving!");
+      if (ev.t === 'warn' && ev.npc === 'sheriff') { cutIn('sheriff', 'angry', 'Watch the hat, partner. Next time I walk.'); hud = true; }
       if (ev.t === 'served' && ev.trick) cutIn(ev.owner, 'surprised', "Well, I'll be! A trick shot!");
       else if (ev.t === 'served' && ev.quality === 3) cutIn(ev.owner, 'happy', NPCS[ev.owner].lines.perfect);
       if (ev.t === 'bonus' && ev.kind === 'cards') cutIn('lavinia', 'surprised', 'That ace was there when I sat down!');
@@ -818,7 +1071,10 @@ function frame(now: number) {
 }
 
 // Read-only handle for automated checks (frame-by-frame motion tests).
-(window as unknown as { __lastOrders: { sim: () => Sim } }).__lastOrders = { sim: () => sim };
+(window as unknown as { __lastOrders: object }).__lastOrders = {
+  sim: () => sim,
+  demo: () => demo && { shot: demo.i, fired: demo.fired, status: demo.sim.status, glasses: demo.sim.glasses?.map((g) => g.body ? [Math.round(g.body.position.x), Math.round(g.body.position.y), g.role] : null) },
+};
 
 // Start on a practice night straight away, then switch to tonight's night as soon as it arrives.
 loadLevel(0);

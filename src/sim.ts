@@ -65,6 +65,7 @@ export type SimEvent =
   | { t: 'bank'; x: number; y: number }
   | { t: 'contact' }
   | { t: 'leave'; npc: NpcId }
+  | { t: 'warn'; npc: NpcId }
   | { t: 'thud'; x: number; y: number }
   | { t: 'served'; x: number; y: number; quality: number; tip: number; owner: NpcId; trick: boolean }
   | { t: 'bonus'; kind: 'peanuts' | 'cards'; x: number; y: number }
@@ -398,12 +399,33 @@ export class Sim {
     }
   }
 
+  /** Pour number on which the sheriff gave his one warning about the hat (-1: not yet). */
+  private hatWarnedOn = -1;
+  get hatWarned(): boolean { return this.hatWarnedOn >= 0; }
+
+  /**
+   * The first time the hat is touched or splashed the sheriff only warns you. Any touch
+   * during the same pour is part of that warning; a touch on a later pour sends him out.
+   */
+  private hatTrouble(prop: Prop): boolean {
+    const pour = this.shots.length;
+    if (this.hatWarnedOn < 0) {
+      this.hatWarnedOn = pour;
+      this.say(prop.owner, 'Watch the hat, partner. Next time I walk.');
+      this.events.push({ t: 'warn', npc: prop.owner });
+      return false;
+    }
+    return pour > this.hatWarnedOn;
+  }
+
   private touchProp(prop: Prop) {
     if (prop.touched) return;
-    prop.touched = true;
     if (prop.kind === 'hat') {
+      if (!this.hatTrouble(prop)) return;
+      prop.touched = true;
       this.walkOut(prop.owner);
     } else {
+      prop.touched = true;
       this.badges.add('Cheat exposed');
       this.say(prop.owner, NPCS[prop.owner].lines.bonus ?? 'Hey!');
       const p = prop.body?.position ?? { x: prop.x, y: prop.y };
@@ -480,7 +502,7 @@ export class Sim {
     // The sheriff's rule: his hat must stay dry.
     for (const p of this.props) {
       if (p.kind !== 'hat' || !p.body || p.wet) continue;
-      if (circleHitsPoly(p.body.position.x, p.body.position.y, PROP_R.hat * 0.7, poly)) {
+      if (circleHitsPoly(p.body.position.x, p.body.position.y, PROP_R.hat * 0.7, poly) && this.hatTrouble(p)) {
         p.wet = true;
         this.walkOut(p.owner);
       }
