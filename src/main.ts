@@ -142,6 +142,7 @@ function drawPad() {
   }
   const amount = Math.round(Math.abs(spin) * 100);
   $('spin-val').textContent = spin === 0 ? 'NONE' : `${spin < 0 ? 'LEFT' : 'RIGHT'} ${amount}%`;
+  $('spin-short').textContent = spin === 0 ? 'off' : `${spin < 0 ? 'L' : 'R'} ${amount}%`;
 }
 
 function setSpinFromPointer(e: PointerEvent) {
@@ -168,6 +169,15 @@ pad.addEventListener('keydown', (e) => {
 });
 pad.tabIndex = 0;
 $('spin-reset').onclick = () => { spin = 0; spinY = 0; drawPad(); };
+
+// Spin is an advanced control, hidden behind a small button until opened (remembered per browser).
+function setSpinOpen(open: boolean) {
+  $('app').classList.toggle('spin-open', open);
+  $('spin-toggle').setAttribute('aria-expanded', String(open));
+  try { localStorage.setItem('lo-spin-open', open ? '1' : '0'); } catch { /* private mode */ }
+}
+$('spin-toggle').onclick = () => setSpinOpen(!$('app').classList.contains('spin-open'));
+try { setSpinOpen(localStorage.getItem('lo-spin-open') === '1'); } catch { setSpinOpen(false); }
 
 // ---------------- Levels and HUD ----------------
 function loadLevel(i: number, asReplay = false, kind: 'REPLAY' | 'SOLUTION' = 'REPLAY') {
@@ -199,7 +209,7 @@ function loadLevel(i: number, asReplay = false, kind: 'REPLAY' | 'SOLUTION' = 'R
   const narrow = matchMedia('(max-width: 520px)').matches;
   if (!asReplay) {
     $('hint').classList.add('fade');
-    showHowto(narrow ? `${level.blurb} ${level.hint}` : level.hint, currentTry(level.id) <= 1);
+    showHowto(introText(level), currentTry(level.id) <= 1);
   } else {
     closeIntro();
     setHint(kind === 'SOLUTION' ? "Here's one way to serve everyone. Watch the power and spin." : 'Replaying your night: same numbers per pour, same result.');
@@ -240,6 +250,7 @@ const DEMO_EVENTS = new Set<SimEvent['t']>(['tip', 'smash', 'thud', 'contact', '
 function showHowto(text: string, withDemo: boolean) {
   $('howto-text').textContent = text;
   $('howto').hidden = false;
+  $('help-btn').setAttribute('aria-pressed', 'true');
   introOpen = true;
   wantDemo = withDemo;
   demo = null;
@@ -252,11 +263,26 @@ function closeIntro() {
   wantDemo = false;
   demo = null;
   $('howto').hidden = true;
+  $('help-btn').setAttribute('aria-pressed', 'false');
   $('ghost').hidden = true;
   // Clear the demo's splashes and bubbles; the real bar is untouched.
   if (wasDemo) renderer.reset();
 }
 $('howto').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); closeIntro(); });
+
+/** The intro line: on phones the scene line too, since the orders box hides it there. */
+function introText(level: Level) {
+  return matchMedia('(max-width: 520px)').matches ? `${level.blurb} ${level.hint}` : level.hint;
+}
+// "?": bring the how-to overlay and its demo back at any point between pours.
+$('help-btn').onclick = () => {
+  if (introOpen) { closeIntro(); return; } // the "?" toggles the overlay
+  if (mode !== 'play' || sim.status !== 'aiming' || drag) return;
+  charging = null; charge = 0;
+  // The demo pour only before the first pour: closing it resets the renderer, which would
+  // wipe this night's broken glass and walk-outs.
+  showHowto(introText(sim.level), sim.shots.length === 0);
+};
 
 const toScreen = (x: number, y: number) => {
   const c = canvas.getBoundingClientRect(), b = board.getBoundingClientRect();
@@ -453,13 +479,17 @@ function updateHud() {
     li.className = cls;
     chips.appendChild(li);
   };
+  // The order to pour now, big; every other order as a small numbered step (full text on hover).
   const next = sim.nextOrder;
+  const cur = next >= 0 ? sim.orders[next] : null;
+  if (cur) add(`Now: ${NPCS[cur.owner].short} · ${cur.drink}`, 'chip-target chip-now');
   sim.orders.forEach((o, i) => {
-    const text = `${i + 1}. ${NPCS[o.owner].short} · ${o.drink}`;
-    if (o.cancelled) { add(`${text} · left`, 'chip-done'); return; }
-    add(o.served ? `${text} ✓` : text, o.served ? 'chip-done' : i === next ? 'chip-target' : 'chip-order');
+    if (i === next) return;
+    const full = `${i + 1}. ${NPCS[o.owner].short} · ${o.drink}`;
+    add(o.cancelled ? `${i + 1} ✕` : o.served ? `${i + 1} ✓` : `${i + 1}`, `${o.served || o.cancelled ? 'chip-done' : 'chip-order'} chip-step`);
+    (chips.lastElementChild as HTMLElement).title = o.cancelled ? `${full} (left)` : o.served ? `${full} (served)` : full;
   });
-  if (level.props.some((p) => p.kind === 'hat') && !sim.left.has('sheriff')) add(sim.hatWarned ? 'Last warning: the hat!' : 'Hands off the hat', 'chip-danger');
+  if (level.props.some((p) => p.kind === 'hat') && !sim.left.has('sheriff')) add(sim.hatWarned ? 'Hat: last warning!' : 'Hat: hands off', 'chip-danger');
   if (level.bonus) add('Bonus: peanuts', `chip-bonus${sim.badges.has('Peanuts for Pete') ? ' got' : ''}`);
   if (level.props.some((p) => p.kind === 'cards')) add('Bonus: cards', `chip-bonus${sim.badges.has('Cheat exposed') ? ' got' : ''}`);
 
@@ -484,14 +514,17 @@ const stage = $('stage');
 // Must match the landscape media query in style.css. There the bar is sized from the full
 // height first and the side column (min LANDSCAPE_SIDE px) gets whatever width is left.
 const landscape = matchMedia('(min-width: 600px) and (min-aspect-ratio: 1/1)');
-const LANDSCAPE_SIDE = 250;
+const LANDSCAPE_SIDE = 220;
 function fit() {
   const s = stage.getBoundingClientRect(), cs = getComputedStyle(stage);
   const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
   const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
   const meter = $('power').getBoundingClientRect().width + parseFloat(cs.columnGap || '0');
   const width = landscape.matches ? document.documentElement.clientWidth - LANDSCAPE_SIDE - 12 : s.width;
-  renderer.resize(Math.max(100, width - padX - meter - 6), Math.max(100, s.height - padY - 6));
+  // Desktop: size from the window height, not the stage (the bar itself would hold the stage open
+  // when the window shrinks).
+  const height = landscape.matches ? document.documentElement.clientHeight - padY : s.height - padY - 6;
+  renderer.resize(Math.max(100, width - padX - meter - 6), Math.max(100, height));
   // Keep the item labels on their items when the bar is resized (the hand follows by itself).
   const h = document.getElementById('howto');
   if (h && !h.hidden) requestAnimationFrame(() => placeTags());
@@ -580,9 +613,25 @@ function showTip(e: PointerEvent, linger: boolean) {
   clearTimeout(tipTimer);
   if (linger) tipTimer = window.setTimeout(() => { tipEl.hidden = true; }, 3200);
 }
-canvas.addEventListener('pointermove', (e) => { if (!drag && e.pointerType === 'mouse') showTip(e, false); });
-// Touch fires pointerleave right after lifting the finger, so only a mouse leaving hides the tip.
-canvas.addEventListener('pointerleave', (e) => { if (!drag && e.pointerType === 'mouse') tipEl.hidden = true; });
+// Hovering an item with the mouse only shows a small "?"; clicking it (without aiming) explains it.
+const qmark = document.createElement('span');
+qmark.className = 'qmark';
+qmark.textContent = '?';
+qmark.hidden = true;
+board.appendChild(qmark);
+function hoverMark(e: PointerEvent) {
+  const p = toWorld(e);
+  const t = describeAt(p.x, p.y);
+  if (!t || !tipEl.hidden) { qmark.hidden = true; return; }
+  const b = board.getBoundingClientRect();
+  qmark.style.left = `${e.clientX - b.left + 12}px`;
+  qmark.style.top = `${e.clientY - b.top - 14}px`;
+  qmark.hidden = false;
+}
+canvas.addEventListener('pointermove', (e) => { if (!drag && e.pointerType === 'mouse') hoverMark(e); else qmark.hidden = true; });
+canvas.addEventListener('pointerdown', () => { qmark.hidden = true; });
+// Touch fires pointerleave right after lifting the finger, so only a mouse leaving hides these.
+canvas.addEventListener('pointerleave', (e) => { if (!drag && e.pointerType === 'mouse') { tipEl.hidden = true; qmark.hidden = true; } });
 
 // ---------------- Reaction cut-ins: a big portrait slides in for the big moments ----------------
 // Art is keyed "<customer>-<mood>", with "<customer>-any" as that customer's fallback for

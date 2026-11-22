@@ -127,14 +127,9 @@ export class Renderer {
   resize(cssW: number, cssH: number) {
     const dpr = Math.min(window.devicePixelRatio || 1, 4);
     const fit = Math.min((cssW * dpr) / PW, (cssH * dpr) / PH);
-    // Whole-number scaling keeps every pixel the same size. On dense screens (3+ device
-    // pixels per art pixel) half steps are invisible, so use them to fill more space.
-    // On dense screens (2+ device pixels per art pixel) a fractional scale is invisible,
-    // so use all the room there is; below that keep whole numbers so pixels stay even.
-    // Inside a Reddit post the frame is short, so on 1x screens rounding down to a whole
-    // number left the bar tiny. Use quarter steps there: a few pixels end up one device
-    // pixel wider than others, which is far less noticeable than a bar half the size.
-    this.k = fit >= 2 ? Math.floor(fit * 8) / 8 : Math.max(0.75, Math.floor(fit * 4) / 4);
+    // Fine fractional steps: a few art pixels end up one device pixel wider than others,
+    // which is far less noticeable than a bar that stops short of the edges of the window.
+    this.k = fit >= 2 ? fit : Math.max(0.75, Math.floor(fit * 16) / 16);
     this.canvas.width = Math.round(PW * this.k);
     this.canvas.height = Math.round(PH * this.k);
     this.canvas.style.width = `${this.canvas.width / dpr}px`;

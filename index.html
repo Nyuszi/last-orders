@@ -16,7 +16,10 @@
       <h1 class="brand">LAST ORDERS</h1>
       <p class="sub" id="sub">NIGHT 1 · THE COPPER SPUR</p>
     </div>
-    <nav class="nights" aria-label="Nights" id="nights"></nav>
+    <div class="top-right">
+      <nav class="nights" aria-label="Nights" id="nights"></nav>
+      <button type="button" class="help-btn" id="help-btn" aria-label="How to play" title="How to play">?</button>
+    </div>
   </header>
 
   <section class="brief" aria-live="polite">
@@ -70,7 +73,8 @@
       <p class="tips"><span class="small-label">TIPS</span> <span id="tips">0c</span></p>
     </div>
     <p class="keys" aria-label="Keyboard controls"><kbd>Q</kbd><kbd>E</kbd> aim · hold <kbd>Space</kbd> to pull, release to pour · <kbd>Shift</kbd> fine aim</p>
-    <div class="spin">
+    <button type="button" class="spin-toggle" id="spin-toggle" aria-expanded="false" aria-controls="spin-box">Spin <span id="spin-short">off</span></button>
+    <div class="spin" id="spin-box">
       <canvas id="spinpad" width="28" height="28" aria-label="Spin: tap the glass where you want to hit it. Left of centre curves left, right of centre curves right."></canvas>
       <div class="spin-text">
         <span class="small-label">SPIN</span>

@@ -239,12 +239,12 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   .chips li { font-size: 8px; padding: 1px 4px; border-width: 1px; }
 
   .stage { padding: 4px 4px 4px 2px; gap: 3px; }
-  .power { flex: 0 0 24px; gap: 2px; }
-  .power-label { font-size: 6px; }
-  .power-meter { width: 18px; padding: 2px; gap: 1px; }
-  .power-meter i { height: 9px; }
+  .power { flex: 0 0 28px; gap: 3px; }
+  .power-label { font-size: 7px; }
+  .power-meter { width: 22px; padding: 2px; gap: 2px; }
+  .power-meter i { height: 14px; }
   .power-grip { left: -4px; right: -4px; }
-  .power-val { font-size: 8px; }
+  .power-val { font-size: 9px; }
 
   .controls { margin: 0 6px calc(6px + env(safe-area-inset-bottom)); padding: 5px 8px; gap: 8px; border-width: 2px; box-shadow: inset 0 0 0 2px var(--line), 2px 2px 0 var(--ink); }
   .pours { flex-direction: row; align-items: center; gap: 8px; }
@@ -279,6 +279,38 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   .stage { grid-column: 2; grid-row: 1 / -1; padding: 8px 10px 8px 4px; justify-content: center; gap: 10px; min-height: 0; }
   .top, .brief, .controls { min-width: 0; }
   .board { flex: 0 0 auto; }
+}
+
+/* ---------- Less clutter (playtest feedback) ---------- */
+.top-right { display: flex; align-items: center; gap: 6px; }
+.help-btn {
+  min-width: 36px; height: 36px; border: var(--px) solid var(--ink); background: #12283a; color: #cbe7f9;
+  font-family: var(--head); font-weight: 700; font-size: 16px;
+  box-shadow: inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 #00000055, inset var(--px) var(--px) 0 #ffffff14;
+}
+/* Spin is for later: hidden behind a small button until opened (remembered per browser). */
+.spin { display: none; }
+#app.spin-open .spin { display: flex; }
+.spin-toggle {
+  height: 30px; padding: 0 9px; border: 2px solid var(--ink); background: var(--card); font-family: var(--head); font-size: 10px;
+  box-shadow: inset -2px -2px 0 #00000055, inset 2px 2px 0 #ffffff14; white-space: nowrap;
+}
+.spin-toggle[aria-expanded="true"] { background: var(--brass); color: var(--ink); }
+.help-btn[aria-pressed="true"] { background: var(--brass); color: var(--ink); }
+/* Hover marker: a mouse over an item shows "?"; clicking it explains the item. */
+.qmark {
+  position: absolute; z-index: 6; width: 20px; height: 20px; display: grid; place-items: center; pointer-events: none;
+  background: #12283a; color: #cbe7f9; border: 2px solid var(--ink); box-shadow: 2px 2px 0 #000;
+  font-family: var(--head); font-weight: 700; font-size: 12px;
+}
+.qmark[hidden] { display: none; }
+/* Orders: the one to pour now is big; the rest are small step markers. */
+.chips li.chip-now { font-size: 12px; padding: 3px 7px; border-width: 2px; }
+.chips li.chip-step { min-width: 18px; text-align: center; padding: 1px 4px; }
+@media (max-width: 520px) {
+  .help-btn { min-width: 30px; height: 30px; font-size: 13px; }
+  .chips li.chip-now { font-size: 10px; padding: 2px 6px; }
+  .spin-toggle { height: 26px; font-size: 9px; }
 }
 
 /* How to play: a dimmed layer over the bar when a night loads. It catches the first tap, so it
@@ -346,3 +378,23 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 /* Tonight's night in the header, and the community line on the result card. */
 .nights button.today { min-width: 0; padding: 0 8px; font-size: 11px; letter-spacing: .06em; }
 .r-stats { margin: 0; font-family: var(--body, inherit); font-size: 12px; line-height: 1.4; color: var(--muted, #b89f80); text-align: center; }
+
+/* ---------- Desktop / landscape: last in the file so nothing later overrides it ---------- */
+@media (min-width: 600px) and (min-aspect-ratio: 1/1) {
+  /* The bar runs the full height of the window, edge to edge; the side column is a bit narrower. */
+  #app { grid-template-columns: minmax(220px, 380px) auto; }
+  .stage { padding: 0 6px 0 2px; gap: 8px; }
+  #game { border-top-width: 0; border-bottom-width: 0; }
+  /* "?" floats over the top-right corner of the play area. */
+  .help-btn { position: fixed; top: 10px; right: 10px; z-index: 20; min-width: 42px; height: 42px; font-size: 19px; }
+  /* A bigger pull meter next to the bar. */
+  .power { flex: 0 0 52px; gap: 6px; }
+  .power-meter { width: 40px; padding: 4px; gap: 3px; }
+  .power-meter i { height: 28px; }
+  .power-grip { left: -7px; right: -7px; height: 12px; top: -6px; }
+  .power-label { font-size: 11px; }
+  .power-val { font-size: 14px; }
+  /* There's room for the spin ball on desktop: always shown, no toggle. */
+  .spin { display: flex; }
+  .spin-toggle { display: none; }
+}
