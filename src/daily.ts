@@ -23,6 +23,32 @@ export function nightNumber(date: string): number {
   return Math.max(1, Math.round((Date.parse(date + 'T00:00:00Z') - Date.parse(LAUNCH + 'T00:00:00Z')) / 864e5) + 1);
 }
 
+// The scene line in tonight's intro ("3 orders tonight. <scene>"). The calendar was built with
+// only 8 lines, so players saw repeats within days. The line is now picked when the night is
+// served, walking through this list one step per day: no line comes back within 24 days.
+// Only the text changes; the stored map, its solution and its hash are untouched.
+const SCENES = [
+  'The stagecoach just pulled in.', 'A cattle drive came through at noon.', 'The piano player is late again.',
+  'Somebody hit a seam of silver.', 'It is too hot to argue.', 'The church social let out early.',
+  'A drifter is asking about the safe.', 'The mail coach brought news from back east.', 'Somebody bet their boots.',
+  'Dust has been blowing in all day.', 'The sheriff is in a mood.', 'Two cowhands are arguing about a horse.',
+  'The roof is leaking over the far end.', 'A travelling preacher is eyeing the bottles.', 'It is payday at the mine.',
+  'Somebody swears they saw a ghost on the ridge.', 'The fiddler brought a friend.', 'The new sign finally went up.',
+  'A rainstorm drove everyone inside.', 'There is a wedding party next door.', 'Somebody owes Lavinia money.',
+  'The town council meets tomorrow.', 'A photographer wants a picture of the bar.', 'Old Pete claims it is his birthday.',
+];
+
+export function sceneFor(date: string): string {
+  const day = Math.floor(Date.parse(date + 'T00:00:00Z') / 864e5);
+  return SCENES[((day % SCENES.length) + SCENES.length) % SCENES.length];
+}
+
+/** Swaps the scene line of a generated night's intro for the one picked for its date. */
+export function withScene<T extends { blurb: string }>(level: T, date: string): T {
+  const m = /^(\d+ orders? tonight\.) /.exec(level.blurb);
+  return m ? { ...level, blurb: `${m[1]} ${sceneFor(date)}` } : level;
+}
+
 /** The date to play: `?date=YYYY-MM-DD` or `#YYYY-MM-DD` (for testing and previews) or today in UTC. */
 export function requestedDate(): string {
   const q = new URLSearchParams(location.search).get('date') ?? location.hash.replace('#', '');
@@ -54,6 +80,6 @@ export async function fetchNight(date: string): Promise<DailyNight> {
     const hand = LEVELS[dayIndex(date) % LEVELS.length];
     night = { date, level: { ...hand }, fallback: true };
   }
-  night.level = { ...night.level, id: `daily-${date}`, night: nightNumber(date) };
+  night.level = { ...withScene(night.level, date), id: `daily-${date}`, night: nightNumber(date) };
   return night;
 }

@@ -6,7 +6,7 @@ import { redis } from '@devvit/web/server';
 import calendar from '../../calendar/server.json';
 import { LEVELS } from '../levels';
 import { dayIndex } from '../generator';
-import { nightNumber, type DailyNight } from '../daily';
+import { nightNumber, withScene, type DailyNight } from '../daily';
 import type { Level } from '../levels';
 import type { Shot } from '../sim';
 
@@ -36,7 +36,7 @@ export async function nightFor(date: string): Promise<DailyNight> {
     const v = n.versions[n.pick ?? 0];
     night = { date, level: v.level, solution: v.solution, metrics: { clear: v.metrics.clear, signature: v.metrics.signature } };
   }
-  night.level = { ...night.level, id: `daily-${date}`, night: nightNumber(date) };
+  night.level = { ...withScene(night.level, date), id: `daily-${date}`, night: nightNumber(date) };
   return night;
 }
 
