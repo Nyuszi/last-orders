@@ -11,9 +11,9 @@ Last Orders
 You're the bartender. Slide every drink down a saloon bar into the right customer's circle: bank off brass, curl with spin, dodge the sheriff's hat. A new bar every day.
 
 **Try it out**
-- Demo post: [fill in: https://www.reddit.com/r/last_orders_saloo_dev/comments/… (the subreddit must be public first)]
+- Demo post: https://www.reddit.com/r/last_orders_saloo_dev/comments/1y1ba11/last_orders_night_1_two_drifters/ (Nov 20 handmade night; swap for a December post before submitting)
 - App listing: https://developers.reddit.com/apps/last-orders-saloon
-- Code: [fill in, optional]
+- Code: https://github.com/Nyuszi/last-orders
 
 **Video**: [fill in: YouTube or Vimeo link, under 1 minute]
 

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portrait cut-out</title>
+<style>
+  body { margin: 0; padding: 16px; background: #1d110b; color: #f3e6cc; font: 14px system-ui; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 16px; }
+  figure { margin: 0; background: #2b1a12; padding: 8px; border: 2px solid #5a3a24; }
+  figcaption { margin-top: 6px; font-size: 12px; color: #cdb894; }
+  canvas { display: block; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<h1>Portrait cut-out</h1>
+<p id="status">Working…</p>
+<div class="grid" id="grid"></div>
+<script>
+// Same keying rules as art/cutout.py.
+const isKey = (r, g, b) => r > 140 && b > 140 && g < 120 && Math.abs(r - b) < 100 && (r + b) / 2 - g > 80;
+const HEIGHT = 300;
+
+async function cut(file) {
+  const name = file.replace(/\.[^.]+$/, '');
+  const img = new Image();
+  img.src = '/img/' + encodeURIComponent(file);
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, 0, 0);
+  const { width: w, height: h } = c;
+  const d = g.getImageData(0, 0, w, h), p = d.data;
+  for (let i = 0; i < p.length; i += 4) if (isKey(p[i], p[i + 1], p[i + 2])) p[i + 3] = 0;
+  for (let pass = 0; pass < 2; pass++) {
+    const kill = [];
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      if (!p[i + 3]) continue;
+      const near = !p[i + 7] || !p[i - 1] || !p[i + w * 4 + 3] || !p[i - w * 4 + 3];
+      if (near && (p[i] + p[i + 2]) / 2 - p[i + 1] > 55 && p[i + 2] > 90) kill.push(i);
+    }
+    for (const i of kill) p[i + 3] = 0;
+  }
+  g.putImageData(d, 0, 0);
+  // Crop to the visible pixels.
+  let x0 = w, y0 = h, x1 = 0, y1 = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (p[(y * w + x) * 4 + 3]) {
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+  const out = document.createElement('canvas');
+  out.height = HEIGHT; out.width = Math.round(cw * HEIGHT / ch);
+  const o = out.getContext('2d');
+  o.imageSmoothingEnabled = true; o.imageSmoothingQuality = 'high';
+  o.drawImage(c, x0, y0, cw, ch, 0, 0, out.width, out.height);
+  const webp = await new Promise((r) => out.toBlob(r, 'image/webp', 0.88));
+  await fetch(`/save?kind=webp&name=${name}`, { method: 'POST', body: webp });
+  const prev = document.createElement('canvas');
+  prev.width = out.width; prev.height = out.height;
+  const pg = prev.getContext('2d');
+  pg.fillStyle = '#2b1a12'; pg.fillRect(0, 0, prev.width, prev.height); pg.drawImage(out, 0, 0);
+  const png = await new Promise((r) => prev.toBlob(r, 'image/png'));
+  await fetch(`/save?kind=preview&name=${name}`, { method: 'POST', body: png });
+  const fig = document.createElement('figure');
+  fig.append(prev);
+  const cap = document.createElement('figcaption');
+  cap.textContent = `${name}.webp · ${out.width}×${out.height}`;
+  fig.append(cap);
+  document.getElementById('grid').append(fig);
+  return name;
+}
+
+(async () => {
+  const files = await fetch('/list').then((r) => r.json());
+  const done = [];
+  for (const f of files) done.push(await cut(f));
+  document.getElementById('status').textContent = done.length ? `Saved ${done.length}: ${done.join(', ')}` : 'No images in art/new/';
+  window.cutoutDone = done;
+})();
+</script>
+</body>
+</html>

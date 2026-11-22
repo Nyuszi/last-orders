@@ -4,19 +4,9 @@ import { Sim, STEP_MS, pointInPoly, type Shot, type Status } from './sim';
 import { SOLUTIONS } from './solutions';
 import { fetchNight, requestedDate } from './daily';
 import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';
-import sheriffAngry from './assets/portraits/sheriff-angry.webp?inline';
-import dutchAny from './assets/portraits/dutch-any.webp?inline';
-import twofistAny from './assets/portraits/twofist-any.webp?inline';
-import laviniaAny from './assets/portraits/lavinia-any.webp?inline';
-import peteAny from './assets/portraits/pete-any.webp?inline';
-import sheriffHappy from './assets/portraits/sheriff-happy.webp?inline';
-import sheriffSurprised from './assets/portraits/sheriff-surprised.webp?inline';
-import sheriffSly from './assets/portraits/sheriff-sly.webp?inline';
-import dutchAngry from './assets/portraits/dutch-angry.webp?inline';
-import dutchSurprised from './assets/portraits/dutch-surprised.webp?inline';
-import peteAngry from './assets/portraits/pete-angry.webp?inline';
-import peteHappy from './assets/portraits/pete-happy.webp?inline';
-import peteSurprised from './assets/portraits/pete-surprised.webp?inline';
+// Every portrait in assets/portraits is picked up automatically, keyed by its file name
+// ("<customer>-<mood>.webp"), so new art only has to be dropped into the folder.
+const PORTRAIT_FILES = import.meta.glob<string>('./assets/portraits/*.webp', { eager: true, query: '?inline', import: 'default' });
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('game');
@@ -385,16 +375,9 @@ canvas.addEventListener('pointerleave', (e) => { if (!drag && e.pointerType === 
 // ---------------- Reaction cut-ins: a big portrait slides in for the big moments ----------------
 // Art is keyed "<customer>-<mood>", with "<customer>-any" as that customer's fallback for
 // any mood. A moment without art simply shows no cut-in (the small speech bubble still appears).
-const PORTRAITS: Record<string, string> = {
-  'sheriff-angry': sheriffAngry,
-  'dutch-any': dutchAny,
-  'twofist-any': twofistAny,
-  'lavinia-any': laviniaAny,
-  'pete-any': peteAny,
-  'sheriff-happy': sheriffHappy, 'sheriff-surprised': sheriffSurprised, 'sheriff-sly': sheriffSly,
-  'dutch-angry': dutchAngry, 'dutch-surprised': dutchSurprised,
-  'pete-angry': peteAngry, 'pete-happy': peteHappy, 'pete-surprised': peteSurprised,
-};
+const PORTRAITS: Record<string, string> = Object.fromEntries(
+  Object.entries(PORTRAIT_FILES).map(([file, src]) => [file.split('/').pop()!.replace('.webp', ''), src]),
+);
 /** Background colour of the cut-in band per mood. */
 const CUTIN_MOOD: Record<string, string> = { angry: 'mood-angry', happy: 'mood-happy', surprised: 'mood-surprised', sly: 'mood-sly' };
 let peteSlapShown = false;

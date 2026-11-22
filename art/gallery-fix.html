@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gallery fix</title>
+<style>
+  body { margin: 0; padding: 16px; background: #1d110b; color: #f3e6cc; font: 14px system-ui; }
+  img, canvas { display: block; max-width: 100%; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<p id="status">Working…</p>
+<div id="out"></div>
+<script>
+// Finds the old sheriff portrait inside a gallery image (alpha-masked template match over a
+// range of scales) and paints the new portrait over it at the same position and size.
+// ?save=1 writes the result back to submission/gallery (the old image is kept in art/new/out).
+const JOBS = [
+  { name: '0-cover', mood: 'happy' },
+  { name: '2-regulars', mood: 'happy' },
+];
+const load = (src) => new Promise((ok, err) => { const i = new Image(); i.onload = () => ok(i); i.onerror = err; i.src = src; });
+const pixels = (img, w, h) => {
+  const c = new OffscreenCanvas(w, h), g = c.getContext('2d');
+  g.drawImage(img, 0, 0, w, h);
+  return g.getImageData(0, 0, w, h).data;
+};
+
+function match(scene, sw, sh, tmpl, tw, th, step) {
+  // Mean squared difference over the template's opaque pixels, sampled every `step` pixels.
+  const pts = [];
+  for (let y = 0; y < th; y += step) for (let x = 0; x < tw; x += step) {
+    const i = (y * tw + x) * 4;
+    if (tmpl[i + 3] > 250) pts.push([x, y, tmpl[i], tmpl[i + 1], tmpl[i + 2]]);
+  }
+  let best = { err: Infinity };
+  for (let oy = 0; oy + th <= sh; oy += step) for (let ox = 0; ox + tw <= sw; ox += step) {
+    let e = 0;
+    for (const [x, y, r, g, b] of pts) {
+      const j = ((oy + y) * sw + ox + x) * 4;
+      const dr = scene[j] - r, dg = scene[j + 1] - g, db = scene[j + 2] - b;
+      e += dr * dr + dg * dg + db * db;
+      if (e > best.err * pts.length) break;
+    }
+    e /= pts.length;
+    if (e < best.err) best = { err: e, x: ox, y: oy };
+  }
+  return best;
+}
+
+async function fix({ name, mood }) {
+  const scene = await load(`/asset/submission/gallery/${name}.png`);
+  const backup = await load(`/asset/art/new/out/${name}-OLD.png`).catch(() => null);
+  const base = backup ?? scene; // always patch the original, never an already-patched image
+  const oldP = await load(`/asset/art/new/out/sheriff-${mood}-OLD.webp`);
+  const newP = await load(`/asset/src/assets/portraits/sheriff-${mood}.webp?${Date.now()}`);
+  const W = base.naturalWidth, H = base.naturalHeight;
+  // Coarse search at quarter size, then refine at full size around the best spot.
+  const q = 4, sw = Math.round(W / q), sh = Math.round(H / q);
+  const sceneQ = pixels(base, sw, sh);
+  let best = { err: Infinity };
+  for (let s = 0.30; s <= 0.80; s += 0.01) {
+    const tw = Math.round(oldP.naturalWidth * s / q), th = Math.round(oldP.naturalHeight * s / q);
+    const m = match(sceneQ, sw, sh, pixels(oldP, tw, th), tw, th, 1);
+    if (m.err < best.err) best = { ...m, s };
+  }
+  const sceneF = pixels(base, W, H);
+  let fine = { err: Infinity };
+  for (let s = best.s - 0.012; s <= best.s + 0.012; s += 0.002) {
+    const tw = Math.round(oldP.naturalWidth * s), th = Math.round(oldP.naturalHeight * s);
+    const t = pixels(oldP, tw, th);
+    const x0 = Math.max(0, best.x * q - 10), y0 = Math.max(0, best.y * q - 10);
+    // Crop the scene around the coarse hit to keep the fine search small.
+    const cw = Math.min(W - x0, tw + 20), ch = Math.min(H - y0, th + 20);
+    const crop = new Uint8ClampedArray(cw * ch * 4);
+    for (let y = 0; y < ch; y++) crop.set(sceneF.subarray(((y0 + y) * W + x0) * 4, ((y0 + y) * W + x0 + cw) * 4), y * cw * 4);
+    const m = match(crop, cw, ch, t, tw, th, 1);
+    if (m.err < fine.err) fine = { err: m.err, x: x0 + m.x, y: y0 + m.y, s, tw, th };
+  }
+  // Paint: the portrait's height maps to the same height; the new art keeps its own width.
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  const g = out.getContext('2d');
+  g.drawImage(base, 0, 0);
+  const h = fine.th, w = Math.round(newP.naturalWidth * h / newP.naturalHeight);
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(newP, fine.x, fine.y, w, h);
+  document.getElementById('out').append(out);
+  if (new URLSearchParams(location.search).get('save')) {
+    const blob = await new Promise((r) => out.toBlob(r, 'image/png'));
+    await fetch(`/save-gallery?name=${name}`, { method: 'POST', body: blob });
+  }
+  return { name, x: fine.x, y: fine.y, w, h, scale: +fine.s.toFixed(3), err: Math.round(fine.err) };
+}
+
+(async () => {
+  const res = [];
+  for (const j of JOBS) res.push(await fix(j));
+  window.fixResult = res;
+  document.getElementById('status').textContent = JSON.stringify(res);
+})();
+</script>
+</body>
+</html>
