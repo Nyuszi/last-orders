@@ -25,6 +25,9 @@ const NPC_SCALE = 2;
 const DRINK_MASS = 0.003 * Math.PI * 81;
 /** How many art pixels a customer's centre sits from the rail. */
 const NPC_INSET = 15;
+/** Where a hand-drawn customer's hands end: on the rail's outer part, sleeves well off it. */
+const HAND_EDGE_LEFT = 59;
+const HAND_EDGE_RIGHT = 137;
 const TIPPED = { right: GLASS_TIPPED, down: rotateCW(GLASS_TIPPED), left: rotateCW(rotateCW(GLASS_TIPPED)), up: rotateCCW(GLASS_TIPPED) };
 
 export const W = 390;
@@ -115,6 +118,48 @@ export class Renderer {
   private leaving = new Map<NpcId, number>();
   private frame = 0;
   private k = 2; // device pixels per buffer pixel
+
+  /** Hand-drawn customer sprites (32×28, facing down), turned toward the counter like the maps. */
+  private npcImgs = new Map<string, Record<'left' | 'right', { img: HTMLCanvasElement; shadow: HTMLCanvasElement; pad: number }>>();
+
+  /**
+   * Use a PNG for a customer instead of its character map. `key` is the customer's id, or for
+   * Pete one of his poses ("pete-lean", "pete-slip", "pete-drop"); he switches only once all three exist.
+   */
+  setNpcImage(key: string, url: string) {
+    const img = new Image();
+    img.onload = () => {
+      // Empty rows under the hands, so the hands (not the image edge) can be put on the rail.
+      const probe = document.createElement('canvas');
+      probe.width = img.width;
+      probe.height = img.height;
+      const pg = probe.getContext('2d')!;
+      pg.drawImage(img, 0, 0);
+      const alpha = pg.getImageData(0, 0, img.width, img.height).data;
+      let pad = 0;
+      while (pad < img.height - 1 && !alpha.slice((img.height - 1 - pad) * img.width * 4, (img.height - pad) * img.width * 4).some((v, i) => i % 4 === 3 && v > 0)) pad++;
+      const turn = (dir: 1 | -1) => {
+        const c = document.createElement('canvas');
+        c.width = img.height;
+        c.height = img.width;
+        const g = c.getContext('2d')!;
+        // -1: counter-clockwise (head left, hands right); 1: clockwise (head right, hands left).
+        if (dir < 0) { g.translate(0, img.width); g.rotate(-Math.PI / 2); } else { g.translate(img.height, 0); g.rotate(Math.PI / 2); }
+        g.drawImage(img, 0, 0);
+        const shadow = document.createElement('canvas');
+        shadow.width = c.width;
+        shadow.height = c.height;
+        const sg = shadow.getContext('2d')!;
+        sg.drawImage(c, 0, 0);
+        sg.globalCompositeOperation = 'source-in';
+        sg.fillStyle = PAL.shadow;
+        sg.fillRect(0, 0, c.width, c.height);
+        return { img: c, shadow, pad };
+      };
+      this.npcImgs.set(key, { left: turn(-1), right: turn(1) });
+    };
+    img.src = url;
+  }
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -371,11 +416,24 @@ export class Renderer {
     if (mood === 'angry' && Math.floor(this.frame / 8) % 2) this.ring(x, py, 18, PAL.danger);
     let map = side === 'left' ? NPC_LEFT[id] : NPC_RIGHT[id];
     let bob = 0;
+    let artKey: string = id;
     if (id === 'pete') {
       // Leaning on his elbow while asleep; the elbow slips, then the arm is out across the bar.
       const pose = armExt < 0.03 ? 'lean' : armExt < 0.3 ? 'slip' : 'drop';
       map = PETE_POSES[pose][side];
       if (pose === 'lean' && Math.floor(this.frame / 40) % 2) bob = side === 'left' ? -1 : 1;
+      const allPoses = (['lean', 'slip', 'drop'] as const).every((p) => this.npcImgs.has(`pete-${p}`));
+      artKey = allPoses ? `pete-${pose}` : '';
+    }
+    const art = this.npcImgs.get(artKey)?.[side];
+    if (art) {
+      // Hands rest on the rail (56–62 left, 133–139 right) and stop short of the play area.
+      const { width: w, height: h } = art.img;
+      const handEdge = side === 'left' ? HAND_EDGE_LEFT - (w - art.pad) : HAND_EDGE_RIGHT - art.pad;
+      const x0 = handEdge + (x - pos.x) + bob, y0 = Math.round(py - h / 2);
+      this.g.drawImage(art.shadow, x0 + 1, y0 + 1);
+      this.g.drawImage(art.img, x0, y0);
+      return;
     }
     const grid = smoothShaded(map, NPC_PAL[id]);
     this.colorGrid(grid, x + bob, py);

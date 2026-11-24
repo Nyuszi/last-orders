@@ -8,50 +8,50 @@ One image per prompt. Where it says "Attach", add that image to the chat first. 
 
 ### hat.png (Sheriff's hat, shrinks to 12×9 px)
 
-Attach: hat-ref.png (first)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 12×9-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 12×9 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. The sheriff's cowboy hat lying on a bar counter, seen from above: an oval tan brim (#d8b47a) around a darker crown with a dent in the middle, and a thin dark brown hat band with a small gold buckle. Wider than it is tall.
+Draw a tiny pixel-art game sprite on an EXACT grid of 12 blocks wide by 9 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. The sheriff's brown cowboy hat lying right side up: an oval tan brim (#d8b47a) around a darker crown with a dent in the middle, and a thin dark brown hat band with a small gold buckle. Wider than it is tall. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### peanuts.png (Peanut bowl, shrinks to 13×10 px)
 
-Attach: peanuts-ref.png (first)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 13×10-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 13×10 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. A round wooden bowl full of roasted peanuts in their shells, seen from above: dark wooden rim, light tan peanuts inside with a few darker shell lines. Slightly wider than tall.
+Draw a tiny pixel-art game sprite on an EXACT grid of 13 blocks wide by 10 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. A round wooden bowl full of roasted peanuts in their shells: a dark wooden rim, light tan peanuts inside with a few darker shell marks. Slightly wider than tall. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### cards.png (Lavinia's cards, shrinks to 11×9 px)
 
-Attach: cards-ref.png (first)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 11×9-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 11×9 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. A small fanned-out stack of playing cards lying on a bar counter, seen from above: four or five white cards with red and black suit marks, slightly spread like a fan.
+Draw a tiny pixel-art game sprite on an EXACT grid of 11 blocks wide by 9 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. A small fanned-out stack of playing cards: four or five white cards with red and black suit marks, slightly spread like a fan. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### ace.png (Hidden ace, shrinks to 6×6 px)
 
-Attach: ace-ref.png (first)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 6×6-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 6×6 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. A single ace of spades playing card seen from above: white card, one large black spade in the middle. Very simple, bold shape.
+Draw a tiny pixel-art game sprite on an EXACT grid of 6 blocks wide by 6 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. A single ace of spades playing card: a white card with one large black spade in the middle. A very simple, bold shape. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### tap.png (Beer tap, shrinks to 11×11 px)
 
-Attach: tap-ref.png (first)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 11×11-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 11×11 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. A brass beer tap fixed to a bar counter, seen from directly above: a round shiny brass base, a steel spout, and a black handle with a red ring pointing up. Round overall.
+Draw a tiny pixel-art game sprite on an EXACT grid of 11 blocks wide by 11 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. A brass beer tap: a round shiny brass base, a steel spout, and a black handle with a red ring pointing up. Round overall. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### tipjar.png (Tip jar, shrinks to 12×10 px)
 
-Attach: tipjar-ref.png (first)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 12×10-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 12×10 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. A glass tip jar on a bar counter, seen from above: a round clear glass rim with a few gold coins and a folded green banknote visible inside.
+Draw a tiny pixel-art game sprite on an EXACT grid of 12 blocks wide by 10 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. A glass tip jar: a round clear glass rim with a few gold coins and a folded green banknote visible inside. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ## Drinks
@@ -60,50 +60,50 @@ Make the beer first, then attach it for the others so every glass has the same s
 
 ### beer.png (Beer, shrinks to 8×7 px)
 
-Attach: beer-ref.png (first)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 8×7-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 8×7 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. A beer mug seen from directly above: round glass rim, golden beer (#e8b24a) with a white foam head, a small handle sticking out to the right, one white highlight pixel on the rim.
+Draw a tiny pixel-art game sprite on an EXACT grid of 8 blocks wide by 7 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. A beer mug: a round glass rim, golden beer (#e8b24a) with a white foam head, a small handle sticking out to the right, and one white highlight block on the rim. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### whiskey.png (Whiskey, shrinks to 8×7 px)
 
-Attach: whiskey-ref.png (first)
+Attach: beer.png
 
 ```
-Redraw the FIRST attached image. It is a tiny 8×7-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 8×7 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. A short whiskey glass seen from directly above, the same size and style as the attached beer: round clear glass rim, amber whiskey (#c77b2e) inside, one white highlight pixel on the rim. No handle.
+Draw a tiny pixel-art game sprite on an EXACT grid of 8 blocks wide by 7 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. A short whiskey glass the same size and style as the attached beer mug but with no handle: a round clear glass rim, amber whiskey (#c77b2e) inside, and one white highlight block on the rim. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### rye.png (Rye, shrinks to 8×7 px)
 
-Attach: rye-ref.png (first)
+Attach: beer.png
 
 ```
-Redraw the FIRST attached image. It is a tiny 8×7-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 8×7 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. A short whiskey glass seen from directly above, the same size and style as the attached beer: round clear glass rim, reddish-brown rye whiskey (#b5652c) inside, one white highlight pixel on the rim. No handle.
+Draw a tiny pixel-art game sprite on an EXACT grid of 8 blocks wide by 7 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. A short whiskey glass the same size and style as the attached beer mug but with no handle: a round clear glass rim, reddish-brown rye whiskey (#b5652c) inside, and one white highlight block on the rim. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### sarsaparilla.png (Sarsaparilla, shrinks to 8×7 px)
 
-Attach: sarsaparilla-ref.png (first)
+Attach: beer.png
 
 ```
-Redraw the FIRST attached image. It is a tiny 8×7-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 8×7 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. A short glass seen from directly above, the same size and style as the attached beer: round clear glass rim, very dark brown sarsaparilla (#5a2c17) with a little tan foam at the edge, one white highlight pixel on the rim. No handle.
+Draw a tiny pixel-art game sprite on an EXACT grid of 8 blocks wide by 7 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. A short glass the same size and style as the attached beer mug but with no handle: a round clear glass rim, very dark brown sarsaparilla (#5a2c17) with a little tan foam at the edge, and one white highlight block on the rim. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### water.png (Water, shrinks to 8×7 px)
 
-Attach: water-ref.png (first)
+Attach: beer.png
 
 ```
-Redraw the FIRST attached image. It is a tiny 8×7-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 8×7 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. A short glass seen from directly above, the same size and style as the attached beer: round clear glass rim, pale blue water (#bfe0ea) inside, one white highlight pixel on the rim. No handle.
+Draw a tiny pixel-art game sprite on an EXACT grid of 8 blocks wide by 7 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. A short glass the same size and style as the attached beer mug but with no handle: a round clear glass rim, pale blue water (#bfe0ea) inside, and one white highlight block on the rim. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### tipped.png (Knocked over, shrinks to 9×5 px)
 
-Attach: tipped-ref.png (first)
+Attach: whiskey.png
 
 ```
-Redraw the FIRST attached image. It is a tiny 9×5-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 9×5 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. The attached whiskey glass knocked over on its side on a bar counter, seen from above: the glass lying sideways with its open end to the right, a small splash of amber whiskey spilling out of the open end.
+Draw a tiny pixel-art game sprite on an EXACT grid of 9 blocks wide by 5 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. The attached whiskey glass knocked over on its side: the glass lying sideways with its open end to the right, and a small splash of amber whiskey spilling out of the open end. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ## Old Pete's arm
@@ -112,76 +112,76 @@ Make "Leaning" first, then attach it for "Slipping" and "Slap" so he stays the s
 
 ### pete-lean.png (Leaning, shrinks to 32×28 px)
 
-Attach: pete-lean-ref.png (first) + pete-any.webp (portrait) (second)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 32×28-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 32×28 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. Use the SECOND attached image only for the character's look and colours, not its size or detail. Old Pete from the portrait, asleep: eyes closed, head drooping, leaning on one bent elbow. A droopy brown slouch hat, bushy white eyebrows, long white beard, worn grey coat. His elbow rests near the bottom edge.
+Draw a tiny pixel-art game sprite on an EXACT grid of 32 blocks wide by 28 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, viewed from a steep top-down angle looking down at the character's head and shoulders, with no desk, table, or legs shown. An old man called Old Pete, asleep: eyes closed, head drooping, leaning on one bent elbow near the bottom edge. A droopy brown slouch hat, bushy white eyebrows, a long white beard, and a worn grey coat. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### pete-slip.png (Slipping, shrinks to 32×28 px)
 
-Attach: pete-slip-ref.png (first) + pete-lean.png (second)
+Attach: pete-lean.png
 
 ```
-Redraw the FIRST attached image. It is a tiny 32×28-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 32×28 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. Use the SECOND attached image only for the character's look and colours, not its size or detail. The same old man as the second image, same size and angle, still half asleep: his elbow is slipping, the bent arm sliding forward toward the bottom edge, shoulders tilted, eyes opening in surprise.
+Draw a tiny pixel-art game sprite on an EXACT grid of 32 blocks wide by 28 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, viewed from a steep top-down angle looking down at the character's head and shoulders, with no desk, table, or legs shown. The same old man as the attached image, same size, colours and angle, still half asleep: his elbow is slipping, the bent arm sliding forward toward the bottom edge, shoulders tilted, eyes opening in surprise. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### pete-slap.png (Slap, shrinks to 32×28 px)
 
-Attach: pete-slap-ref.png (first) + pete-lean.png (second)
+Attach: pete-lean.png
 
 ```
-Redraw the FIRST attached image. It is a tiny 32×28-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 32×28 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. Use the SECOND attached image only for the character's look and colours, not its size or detail. The same old man as the second image, same size and angle, jolted awake: his arm flung straight out forward across the bottom edge, open hand slapping down, mouth open.
+Draw a tiny pixel-art game sprite on an EXACT grid of 32 blocks wide by 28 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, viewed from a steep top-down angle looking down at the character's head and shoulders, with no desk, table, or legs shown. The same old man as the attached image, same size, colours and angle, jolted awake: one arm flung straight out forward past the bottom edge, open hand slapping down, mouth open. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### pete-palm.png (Palm, shrinks to 14×14 px)
 
-Attach: pete-palm-ref.png (first)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 14×14-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 14×14 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. An old man's open hand seen from directly above, palm down on a bar counter, fingers spread, pale skin (#e2b48c). Simple bold shape.
+Draw a tiny pixel-art game sprite on an EXACT grid of 14 blocks wide by 14 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, seen from directly above (top-down), with no table, counter or background shown. An old man's open hand, palm down, fingers spread, pale skin (#e2b48c). A simple, bold shape. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ## Customers
 
-Attach each customer's portrait (src/assets/portraits/<name>-any.webp, or sheriff-happy.webp). Each is drawn 32×28 in the game, rotated so the hands face the counter.
+No attachments needed. Each is drawn 32×28 in the game, turned so the hands rest on the bar rail.
 
 ### npc-sheriff.png (Sheriff, shrinks to 32×28 px)
 
-Attach: npc-sheriff-ref.png (first) + sheriff-happy.webp (portrait) (second)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 32×28-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 32×28 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. Use the SECOND attached image only for the character's look and colours, not its size or detail. The sheriff from the portrait, but WITHOUT his hat (the first image still shows the old hat: replace it with short wavy brown hair; his hat lies on the bar in front of him). Short wavy brown hair, a thick brown walrus mustache, a stern face, brown leather vest over a white shirt, a red neckerchief, a silver star on the chest, both hands resting near the bottom edge.
+Draw a tiny pixel-art game sprite on an EXACT grid of 32 blocks wide by 28 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, viewed from a steep top-down angle looking down at the character's head, shoulders, and hands reaching forward toward the bottom edge, with no desk, table, or legs shown. A sheriff character with short wavy brown hair, a thick brown walrus mustache, a stern face, a brown leather vest over a white shirt, a red neckerchief, and a silver star badge on the chest. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### npc-dutch.png (Dutch, shrinks to 32×28 px)
 
-Attach: npc-dutch-ref.png (first) + dutch-any.webp (portrait) (second)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 32×28-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 32×28 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. Use the SECOND attached image only for the character's look and colours, not its size or detail. Dutch from the attached portrait: a cheerful stocky man with rosy cheeks, a black bowler hat with a dark red band, a big ginger handlebar mustache, an olive-green coat over a mustard-yellow vest, both hands near the bottom edge.
+Draw a tiny pixel-art game sprite on an EXACT grid of 32 blocks wide by 28 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, viewed from a steep top-down angle looking down at the character's head, shoulders, and hands reaching forward toward the bottom edge, with no desk, table, or legs shown. A cheerful stocky man called Dutch with rosy cheeks, a black bowler hat with a dark red band, a big ginger handlebar mustache, and an olive-green coat over a mustard-yellow vest. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### npc-lavinia.png (Lavinia, shrinks to 32×28 px)
 
-Attach: npc-lavinia-ref.png (first) + lavinia-any.webp (portrait) (second)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 32×28-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 32×28 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. Use the SECOND attached image only for the character's look and colours, not its size or detail. Miss Lavinia from the attached portrait: an elegant woman with a sly smile, a small purple hat with a pink feather, long dark curly hair, a mauve high-collared dress with a gold brooch, a small fan of cards in her hands near the bottom edge.
+Draw a tiny pixel-art game sprite on an EXACT grid of 32 blocks wide by 28 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, viewed from a steep top-down angle looking down at the character's head, shoulders, and hands reaching forward toward the bottom edge, with no desk, table, or legs shown. An elegant woman called Miss Lavinia with a sly smile, a small purple hat with a pink feather, long dark curly hair, a mauve high-collared dress with a gold brooch, and a small fan of cards in her hands. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### npc-twofist.png (Two-Fist, shrinks to 32×28 px)
 
-Attach: npc-twofist-ref.png (first) + twofist-any.webp (portrait) (second)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 32×28-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 32×28 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. Use the SECOND attached image only for the character's look and colours, not its size or detail. Two-Fist from the attached portrait: a lean gambler with dark stubble and a scar through one eyebrow, a black flat-brimmed hat with a red band, a black bandana, a dark red coat, a glass of rye in each hand near the bottom edge.
+Draw a tiny pixel-art game sprite on an EXACT grid of 32 blocks wide by 28 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, viewed from a steep top-down angle looking down at the character's head, shoulders, and hands reaching forward toward the bottom edge, with no desk, table, or legs shown. A lean gambler called Two-Fist with dark stubble and a scar through one eyebrow, a black flat-brimmed hat with a red band, a black bandana, a dark red coat, and a glass of rye in each hand. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```
 
 ### npc-pete.png (Pete, shrinks to 32×28 px)
 
-Attach: npc-pete-ref.png (first) + pete-any.webp (portrait) (second)
+Attach: nothing
 
 ```
-Redraw the FIRST attached image. It is a tiny 32×28-pixel game sprite shown blown up, so every pixel is a big square block. Make a cleaner, better-looking version of it at EXACTLY the same resolution: the same 32×28 grid of equal square blocks, the same size, position and angle, an outline exactly one block thick in dark brown (#1a0f0a). Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up the same way, filling the image like the first one, on one flat solid magenta background (#FF00FF) with nothing else in it. Pixel art for a western saloon game. Use the SECOND attached image only for the character's look and colours, not its size or detail. Old Pete from the attached portrait: a sleepy old man with half-closed eyes, a droopy brown slouch hat, bushy white eyebrows, a long white beard, a worn grey coat, arms folded near the bottom edge.
+Draw a tiny pixel-art game sprite on an EXACT grid of 32 blocks wide by 28 blocks tall, shown blown up so every pixel is a big square block. Pixel art for a western saloon game, viewed from a steep top-down angle looking down at the character's head, shoulders, and hands reaching forward toward the bottom edge, with no desk, table, or legs shown. A sleepy old man called Old Pete with half-closed eyes, a droopy brown slouch hat, bushy white eyebrows, a long white beard, and a worn grey coat. An outline exactly one block thick in dark brown (#1a0f0a) around the whole shape. Every block is one flat colour. No detail smaller than one block, no thin lines, no smooth shading, no gradients, no anti-aliasing, no blur, no text, at most 8 colours. Output it blown up, filling the image, on one flat solid magenta background (#FF00FF) with nothing else in it.
 ```

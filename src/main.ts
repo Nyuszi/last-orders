@@ -15,6 +15,9 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const canvas = $<HTMLCanvasElement>('game');
 const board = $('board');
 const renderer = new Renderer(canvas);
+// Hand-drawn customer sprites ("npc-<id>.png", 32×28 facing down; Pete: "npc-pete-<lean|slip|drop>.png") replace the built-in maps.
+const NPC_FILES = import.meta.glob<string>('./assets/sprites/npc-*.png', { eager: true, query: '?inline', import: 'default' });
+for (const [path, url] of Object.entries(NPC_FILES)) renderer.setNpcImage(path.match(/npc-([\w-]+)\.png$/)![1], url);
 
 const DRINK_COLOR: Record<string, string> = { beer: '#e8b24a', rye: '#b5652c', whiskey: '#c77b2e', sarsaparilla: '#5a2c17', water: '#bfe0ea' };
 

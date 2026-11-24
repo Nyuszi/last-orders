@@ -22,6 +22,12 @@ import { NPC_SPRITES, NPC_PAL } from '/src/sprites.ts';
 const JOBS = [
   { file: 'npc-sheriff.webp', name: 'Sheriff v1 (top-down)', map: NPC_SPRITES.sheriff, pal: NPC_PAL.sheriff, sizes: [[32, 28]] },
   { file: 'npc-sheriff-v2.png', name: 'Sheriff v2 (three-quarter)', map: NPC_SPRITES.sheriff, pal: NPC_PAL.sheriff, sizes: [[32, 28]] },
+  { file: 'npc-sheriff-v3.png', name: 'Sheriff v3 (blocky)', map: NPC_SPRITES.sheriff, pal: NPC_PAL.sheriff, sizes: [[32, 28]] },
+  { file: 'npc-sheriff-v4.png', name: 'Sheriff v4 (no bar)', map: NPC_SPRITES.sheriff, pal: NPC_PAL.sheriff, sizes: [[32, 28]] },
+  { file: 'npc-dutch-v1.webp', name: 'Dutch v1', map: NPC_SPRITES.dutch, pal: NPC_PAL.dutch, sizes: [[32, 28]] },
+  { file: 'npc-lavinia-v1.webp', name: 'Lavinia v1', map: NPC_SPRITES.lavinia, pal: NPC_PAL.lavinia, sizes: [[32, 28]] },
+  { file: 'npc-twofist-v1.webp', name: 'Two-Fist v1', map: NPC_SPRITES.twofist, pal: NPC_PAL.twofist, sizes: [[32, 28]] },
+  { file: 'npc-pete-v1.png', name: 'Pete v1', map: NPC_SPRITES.pete, pal: NPC_PAL.pete, sizes: [[32, 28]] },
 ];
 const isKey = (r, g, b) => r > 140 && b > 140 && g < 120 && Math.abs(r - b) < 100 && (r + b) / 2 - g > 80;
 
