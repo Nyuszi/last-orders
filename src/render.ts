@@ -75,7 +75,7 @@ function mixHex(a: string, b: string, t: number): string {
   return '#' + [m(16), m(8), m(0)].map((v) => v.toString(16).padStart(2, '0')).join('');
 }
 const shadeCache = new Map<SpriteMap, (string | null)[][]>();
-function smoothShaded(map16: SpriteMap, pal: Record<string, string>): (string | null)[][] {
+export function smoothShaded(map16: SpriteMap, pal: Record<string, string>): (string | null)[][] {
   const hit = shadeCache.get(map16);
   if (hit) return hit;
   const m = scale2x(map16);

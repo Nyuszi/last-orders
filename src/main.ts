@@ -6,6 +6,9 @@ import { fetchNight, requestedDate } from './daily';
 import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';// Every portrait in assets/portraits is picked up automatically, keyed by its file name
 // ("<customer>-<mood>.webp"), so new art only has to be dropped into the folder.
 const PORTRAIT_FILES = import.meta.glob<string>('./assets/portraits/*.webp', { eager: true, query: '?inline', import: 'default' });
+// The beer tap's sprites (tower head, column strip, drip tray, knob), inlined like the portraits.
+const TAP_FILES = import.meta.glob<string>('./assets/tap/*.png', { eager: true, query: '?inline', import: 'default' });
+const tapSprite = (name: string) => TAP_FILES[`./assets/tap/${name}.png`];
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('game');
@@ -26,7 +29,8 @@ let mode: 'play' | 'replay' = 'play';
 let replayShots: Shot[] = [];
 let recorded: Shot[] = [];
 let aim: Aim | null = null;
-let drag: { x0: number; y0: number } | null = null;
+/** A finger (or the mouse) held on the bar, aiming. */
+let drag: { x0: number; y0: number; moved: boolean } | null = null;
 let acc = 0;
 let last = performance.now();
 let lastStatus: Status = 'aiming';
@@ -80,23 +84,37 @@ function currentTry(id: string) {
 /** Bragging line for a finished night; a plain count for one you didn't finish. */
 function triesText(t: number, won = true) { return won ? (t === 1 ? 'First try' : `Took ${t} tries`) : `Try ${t}`; }
 
-// ---------------- Power meter (side bar) ----------------
-const CELLS = 12;
-const meter = $('power-meter');
-for (let i = 0; i < CELLS; i++) {
-  const cell = document.createElement('i');
-  // Green for a gentle slide, amber in the middle, red when you really shove it.
-  const t = i / (CELLS - 1);
-  cell.style.setProperty('--cell', t < 0.45 ? '#6dbb4a' : t < 0.8 ? '#f2b53a' : '#e8664a');
-  meter.appendChild(cell);
-}
+// ---------------- The beer tap (strength) ----------------
+// Pull the knob down the slot to set the strength; the slot fills with beer, green for a nudge
+// up to red for a hard pour. Let go to pour. The tap is its own control, so a shaky pull can't
+// swing the aim (playtest: "still too sensitive" with one drag doing both).
+const tapEl = $('power');
+const tapKnob = $<HTMLImageElement>('tap-knob');
+const tapBeer = $('tap-beer');
+const tapLast = $('tap-last');
+$<HTMLImageElement>('tap-top').src = tapSprite('tap-top');
+$<HTMLImageElement>('tap-tray').src = tapSprite('tap-tray');
+tapKnob.src = tapSprite('tap-knob');
+$('tap-column').style.backgroundImage = `url(${tapSprite('tap-mid')})`;
+const tapScale = () => parseFloat(getComputedStyle(tapEl).getPropertyValue('--s')) || 1.5;
+/** Top of the beer inside the slot, and the slot's inner height, in CSS px. Match style.css. */
+const slotTop = () => 30 * tapScale() + 2;
+const slotH = () => Math.max(40, tapEl.clientHeight - 56.7 * tapScale() - 4);
+
+/** Shows a strength on the tap: the knob's pin and the beer level sit at the same height. */
 function showPower(power: number, resting: boolean) {
-  const on = Math.round(power * CELLS);
-  Array.from(meter.children).forEach((c, i) => c.classList.toggle('on', i < on));
-  meter.classList.toggle('resting', resting);
-  $('power-val').textContent = `${Math.round(power * 100)}%`;
-  $('power').setAttribute('aria-valuenow', String(Math.round(power * 100)));
+  const p = resting ? 0 : Math.max(0, Math.min(1, power));
+  const h = slotH();
+  tapEl.style.setProperty('--slot-h', `${h}px`);
+  tapKnob.classList.toggle('back', resting);
+  tapKnob.style.top = `${slotTop() - 5.5 * tapScale() + p * h}px`;
+  tapBeer.style.height = `${p * h}px`;
+  tapBeer.style.borderBottomWidth = p > 0.01 ? '3px' : '0';
+  tapEl.setAttribute('aria-valuenow', String(Math.round(p * 100)));
+  // After a pour, a cream line marks how far that pour was pulled.
+  if (resting && power > 0) { tapLast.style.top = `${slotTop() + power * h - 1}px`; tapLast.hidden = false; }
 }
+function clearLastPull() { tapLast.hidden = true; }
 
 // ---------------- Spin pad: tap the glass where you want to hit it ----------------
 const pad = $<HTMLCanvasElement>('spinpad');
@@ -187,9 +205,10 @@ function loadLevel(i: number, asReplay = false, kind: 'REPLAY' | 'SOLUTION' = 'R
   lesson = null;
   if (document.getElementById('cutin')) { clearTimeout(cutinTimer); cutinEl.hidden = true; }
   peteSlapShown = false; lastServed = null;
-  aimShown = false; charging = null; charge = 0;
+  aimAngle = -Math.PI / 2; charging = null; charge = 0;
   if (document.getElementById('coach')) hideCoach();
-  if (meter.children.length) showPower(0, true);
+  showPower(0, true);
+  clearLastPull();
   levelIndex = i;
   const level = NIGHTS[i];
   sim = new Sim(level);
@@ -239,9 +258,13 @@ let demo: null | {
   sim: Sim; acc: number; shots: DemoShot[]; i: number; from: number;
   phaseAt: number; fired: boolean; settledAt: number;
 } = null;
-// Each demo pour: press and pull a little, sweep the aim to the target (so you see aiming),
-// pull to full strength, hold, let go. Then wait for the drink to stop before the next pour.
-const DEMO_START_MS = 500, DEMO_PRESS_MS = 450, DEMO_SWEEP_MS = 1100, DEMO_PULL_MS = 700, DEMO_HOLD_MS = 550;
+// Each demo pour: the hand touches the bar and sweeps the aim to the target (so you see aiming),
+// moves over to the beer tap, pulls the knob down, holds, lets go. Then wait for the drink to
+// stop before the next pour.
+const DEMO_START_MS = 500, DEMO_PRESS_MS = 450, DEMO_SWEEP_MS = 1100, DEMO_REACH_MS = 650, DEMO_PULL_MS = 900, DEMO_HOLD_MS = 550;
+// The hand lives on the page, not inside the bar, so it can reach the tap beside the bar.
+const ghostEl = $('ghost');
+document.body.appendChild(ghostEl);
 const DEMO_BETWEEN_MS = 500, DEMO_AFTER_MS = 1400, DEMO_MAX_ROLL_MS = 5000;
 /** Only physical effects show during the demo: no speech bubbles, tips or bonus pop-ups. */
 const DEMO_EVENTS = new Set<SimEvent['t']>(['tip', 'smash', 'thud', 'contact', 'bank', 'slam', 'settled']);
@@ -264,20 +287,25 @@ function closeIntro() {
   $('howto').hidden = true;
   $('help-btn').setAttribute('aria-pressed', 'false');
   $('ghost').hidden = true;
-  // Clear the demo's splashes and bubbles; the real bar is untouched.
-  if (wasDemo) renderer.reset();
+  // Clear the demo's splashes and bubbles (and its tap pull); the real bar is untouched.
+  if (wasDemo) { renderer.reset(); showPower(0, true); }
 }
 $('howto').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); closeIntro(); });
 
 /** The intro line: on phones the scene line too, since the orders box hides it there. */
 function introText(level: Level) {
-  return matchMedia('(max-width: 520px)').matches ? `${level.blurb} ${level.hint}` : level.hint;
+  const hint = howToHint(level.hint);
+  return matchMedia('(max-width: 520px)').matches ? `${level.blurb} ${hint}` : hint;
+}
+/** Nights generated before the beer tap still say "Drag back to pour"; tell them the new way. */
+function howToHint(hint: string) {
+  return /^drag back/i.test(hint) ? 'Touch the bar to aim, then pull the beer tap down and let go to pour. Stop each drink inside its dotted circle.' : hint;
 }
 // "?": bring the how-to overlay and its demo back at any point between pours.
 $('help-btn').onclick = () => {
   if (introOpen) { closeIntro(); return; } // the "?" toggles the overlay
   if (mode !== 'play' || sim.status !== 'aiming' || drag) return;
-  charging = null; charge = 0;
+  cancelCharge();
   // The demo pour only before the first pour: closing it resets the renderer, which would
   // wipe this night's broken glass and walk-outs.
   showHowto(introText(sim.level), sim.shots.length === 0);
@@ -330,22 +358,28 @@ function runDemo(now: number, dt: number) {
   if (shot && !d.fired) {
     const t = now - d.phaseAt;
     if (t >= 0) {
-      // Press and pull a little at the old aim, sweep to the new aim, pull to full, hold.
+      // A finger touches the bar on the old aim and slides to the new one (the line follows it),
+      // then the hand moves over to the beer tap, pulls the knob down to the strength, holds,
+      // and lets go.
       const ease = (k: number) => 1 - (1 - Math.min(1, Math.max(0, k))) ** 2;
-      const k1 = ease(t / DEMO_PRESS_MS);
+      const aimed = DEMO_PRESS_MS + DEMO_SWEEP_MS;
       const k2 = ease((t - DEMO_PRESS_MS) / DEMO_SWEEP_MS);
-      const k3 = ease((t - DEMO_PRESS_MS - DEMO_SWEEP_MS) / DEMO_PULL_MS);
+      const kReach = ease((t - aimed) / DEMO_REACH_MS);
+      const k3 = ease((t - aimed - DEMO_REACH_MS) / DEMO_PULL_MS);
       const turn = Math.atan2(Math.sin(shot.angle - d.from), Math.cos(shot.angle - d.from));
       const angle = d.from + turn * k2;
-      const power = 0.25 * shot.power * k1 + 0.75 * shot.power * k3;
+      const power = shot.power * k3;
       a = { angle, power };
-      placeHand(angle, power / 0.8);
-      if (t > DEMO_PRESS_MS + DEMO_SWEEP_MS + DEMO_PULL_MS + DEMO_HOLD_MS) {
+      showPower(power, false);
+      const onBar = barPoint(angle), onKnob = knobPoint();
+      placeHand(onBar.x + (onKnob.x - onBar.x) * kReach, onBar.y + (onKnob.y - onBar.y) * kReach);
+      if (t > aimed + DEMO_REACH_MS + DEMO_PULL_MS + DEMO_HOLD_MS) {
         d.sim.fire(shot.angle, shot.power, 0);
         d.fired = true;
         d.settledAt = 0;
         d.phaseAt = now;
         $('ghost').hidden = true;
+        showPower(0, true);
       }
     }
   }
@@ -367,16 +401,23 @@ function runDemo(now: number, dt: number) {
   renderer.draw(d.sim, a, false, 0);
 }
 
-/** The hand presses on the upper bar and pulls back, opposite to the aim, as far as the pull. */
-function placeHand(angle: number, pull: number) {
-  const s = sim.level.start;
-  const press = { x: s.x, y: s.y - 230 };
-  const reach = 110 * pull; // world units on screen; the real pull for this power is longer
-  const p = toScreen(press.x - Math.cos(angle) * reach, press.y - Math.sin(angle) * reach);
-  const g = $('ghost');
-  g.style.left = `${p.x}px`;
-  g.style.top = `${p.y}px`;
-  g.hidden = false;
+/** Where the demo finger touches the bar: along the aim, well up from the drink, where aiming
+ * is finest. In page (viewport) pixels. */
+function barPoint(angle: number) {
+  const s = sim.level.start, reach = 200; // world units from the drink
+  const c = canvas.getBoundingClientRect();
+  return { x: c.left + ((s.x + Math.cos(angle) * reach) / W) * c.width, y: c.top + ((s.y + Math.sin(angle) * reach) / H) * c.height };
+}
+/** The middle of the tap's wooden knob, in page pixels (it moves as the tap is pulled). */
+function knobPoint() {
+  const k = tapKnob.getBoundingClientRect();
+  return { x: k.left + k.width * 0.22, y: k.top + k.height * 0.5 };
+}
+/** Puts the demo hand's fingertip on a point of the page. */
+function placeHand(x: number, y: number) {
+  ghostEl.style.left = `${x}px`;
+  ghostEl.style.top = `${y}px`;
+  ghostEl.hidden = false;
 }
 
 /** Labels on the things on tonight's bar, so it's clear what you may hit and what not. */
@@ -509,24 +550,27 @@ function updateHud() {
   drawPad();
 }
 
-// Size the bar from the whole stage (minus the pull meter), not from the board, so the
-// board can shrink to the bar's width and keep the meter right next to it.
+// Size the bar from the whole stage (minus the beer tap), not from the board, so the
+// board can shrink to the bar's width and keep the tap right next to it.
 const stage = $('stage');
 // Must match the landscape media query in style.css. There the bar is sized from the full
 // height first and the side column (min LANDSCAPE_SIDE px) gets whatever width is left.
 const landscape = matchMedia('(min-width: 600px) and (min-aspect-ratio: 1/1)');
 const LANDSCAPE_SIDE = 220;
-// Phones: the pull meter moves into the bottom bar, and the bar may lose up to FLOOR_CROP world
-// units of empty floor on each side (nobody stands there) so it can fill the height.
+// Phones: the bar may lose up to FLOOR_CROP world units of empty floor on each side (nobody
+// stands there) so it can fill the height.
 const phone = matchMedia('(max-width: 520px)');
 const FLOOR_CROP = 30;
+/** The tap sits left of the bar (between the side column and the bar on desktop), and on
+ * phones right of it, under the thumb of the hand holding the phone. */
 function placeMeter() {
-  const pw = $('power'), controls = document.querySelector('.controls')!;
-  if (phone.matches) { if (pw.parentElement !== controls) controls.insertBefore(pw, $('spin-toggle')); }
-  else if (pw.parentElement !== stage) stage.insertBefore(pw, board);
+  const pw = $('power');
+  if (phone.matches) { if (pw.nextElementSibling !== null || pw.parentElement !== stage) stage.appendChild(pw); }
+  else if (pw.nextElementSibling !== board) stage.insertBefore(pw, board);
 }
 function fit() {
   placeMeter();
+  requestAnimationFrame(() => showPower(0, true));
   const s = stage.getBoundingClientRect(), cs = getComputedStyle(stage);
   const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
   const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
@@ -696,54 +740,48 @@ function hideCutIn() {
 }
 cutinEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); hideCutIn(); });
 
-// ---------------- Input: drag back anywhere, release to slide ----------------
+// ---------------- Input: touch the bar to aim, pull the beer tap to pour ----------------
+// Playtesters found one drag doing both jobs (angle = aim, length = strength) too sensitive:
+// any wobble while pulling for strength also swung the aim. Now they're two controls, like the
+// cue and the power stick in 8 Ball Pool. Touching the bar points the aim at your finger (the
+// further up the bar you touch, the finer the aim) and lifting the finger never pours. The tap
+// sets the strength and pours when you let go.
 function toWorld(e: PointerEvent) {
   const r = canvas.getBoundingClientRect();
   return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
 }
+/** Screen px a finger may wander on the bar and still count as a tap (which explains an item). */
+const TAP_SLOP = 8;
 
-// Tuned after playtesting on phones ("too sensitive"): a longer pull for full power, a dead
-// zone at the start that also works as "cancel" (slide back and let go), and a smoothed
-// direction so a wobbling finger doesn't swing the aim.
-const FULL_PULL = 240; // world units of drag for full power (was 150)
-const DEAD_ZONE = 24; // pull shorter than this: no aim yet, and letting go here cancels
-const AIM_SMOOTHING = 0.45; // share of each finger move the aim follows (1 = no smoothing)
-let smoothAngle: number | null = null;
+/** Points the aim from the drink to the finger. Touches right next to the glass are ignored. */
+function aimAtPointer(e: PointerEvent) {
+  const p = toWorld(e), s = sim.level.start;
+  const dx = p.x - s.x, dy = p.y - s.y;
+  if (Math.hypot(dx, dy) < 16) return;
+  aimAngle = clampAngle(Math.atan2(dy, dx));
+}
 
 canvas.addEventListener('pointerdown', (e) => {
   if (mode !== 'play' || sim.status !== 'aiming' || sim.poursLeft <= 0) return;
-  // The first tap of a night only closes the intro, so nobody pours blind under the text.
+  // The first tap of a night only closes the intro, so nobody aims blind under the text.
   if (introOpen) { closeIntro(); return; }
   canvas.setPointerCapture(e.pointerId);
   $('hint').classList.add('fade');
   tipEl.hidden = true;
-  const p = toWorld(e);
-  drag = { x0: p.x, y0: p.y };
-  aim = null;
-  smoothAngle = null;
-  showPower(0, false);
+  drag = { x0: e.clientX, y0: e.clientY, moved: false };
+  aimAtPointer(e);
 });
-
 canvas.addEventListener('pointermove', (e) => {
   if (!drag) return;
-  const p = toWorld(e);
-  const dx = drag.x0 - p.x, dy = drag.y0 - p.y;
-  const len = Math.hypot(dx, dy);
-  if (len < DEAD_ZONE) {
-    if (aim) pullHint('Let go here to cancel');
-    aim = null; showPower(0, false); return;
-  }
-  const target = Math.atan2(dy, dx);
-  if (smoothAngle === null) smoothAngle = target;
-  else {
-    const d = Math.atan2(Math.sin(target - smoothAngle), Math.cos(target - smoothAngle));
-    smoothAngle += d * AIM_SMOOTHING;
-  }
-  aim = { angle: smoothAngle, power: Math.min(1, (len - DEAD_ZONE) / (FULL_PULL - DEAD_ZONE)) };
-  aimAngle = clampAngle(aim.angle);
-  showPower(aim.power, false);
-  pullHint('Let go to pour · slide back to cancel');
+  if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > TAP_SLOP) drag.moved = true;
+  aimAtPointer(e);
 });
+canvas.addEventListener('pointerup', (e) => {
+  const tapped = !drag || !drag.moved;
+  drag = null;
+  if (tapped) showTip(e, true);
+});
+canvas.addEventListener('pointercancel', () => { drag = null; });
 
 /** A short line at the top of the bar while you pull (not the intro, which is closed by now). */
 function pullHint(text: string) {
@@ -754,52 +792,57 @@ function pullHint(text: string) {
   clearTimeout(hintTimer);
 }
 
-let lastAimed = false;
-function endDrag() {
-  lastAimed = !!aim;
-  if (drag) $('hint').classList.add('fade');
-  if (drag && aim && aim.power > 0.02 && sim.status === 'aiming') {
-    if (sim.fire(aim.angle, aim.power, spin)) {
-      recorded = [...sim.shots];
-      slowSteps = SLOW_STEPS;
-      countTryIfFirstPour();
-      showPower(aim.power, true);
-      updateHud();
-    }
-  } else {
-    showPower(0, true);
-  }
-  drag = null;
-  aim = null;
-}
-canvas.addEventListener('pointerup', endDrag);
-canvas.addEventListener('pointerup', (e) => { if (!lastAimed) showTip(e, true); });
-canvas.addEventListener('pointercancel', () => { drag = null; aim = null; showPower(0, true); $('hint').classList.add('fade'); });
+// The tap: press anywhere on it and drag down. The knob follows the finger 1:1 down the slot,
+// so a full pull is the whole height of the bar. Push back to the top and let go to cancel.
+tapEl.addEventListener('pointerdown', (e) => {
+  if (mode === 'play' && introOpen) closeIntro();
+  if (!canShoot() || charging) return;
+  e.preventDefault();
+  tapEl.setPointerCapture(e.pointerId);
+  tapEl.classList.add('grab');
+  tipEl.hidden = true;
+  charging = { by: 'tap', started: performance.now(), y0: e.clientY };
+  charge = 0;
+  showPower(0, false);
+  pullHint('Pull the tap down, then let go to pour');
+});
+tapEl.addEventListener('pointermove', (e) => {
+  if (charging?.by !== 'tap') return;
+  charge = Math.max(0, Math.min(1, (e.clientY - charging.y0) / slotH()));
+  showPower(charge, false);
+  pullHint(charge < TAP_MIN ? 'Let go here to cancel' : 'Let go to pour · push back up to cancel');
+});
+tapEl.addEventListener('pointerup', () => { if (charging?.by === 'tap') { $('hint').classList.add('fade'); shootCharged(TAP_MIN); } });
+tapEl.addEventListener('pointercancel', () => { if (charging?.by === 'tap') { cancelCharge(); $('hint').classList.add('fade'); } });
 
-// ---------------- Pool-style controls: Q/E to aim, pull to shoot ----------------
-// Like 8 Ball Pool: turn the aim with Q and E (hold Shift for fine aim), then hold Space to
-// draw the hand back and release to pour. The power meter only displays the strength.
+// ---------------- Keyboard: Q/E to aim, hold Space to pull the tap ----------------
+// Like 8 Ball Pool: turn the aim with Q and E (hold Shift for fine aim), then hold Space and
+// the tap's knob slides down by itself; let go to pour.
 let aimAngle = -Math.PI / 2;
-let aimShown = false; // the guideline stays up once you've aimed with keys
 let turning = 0; // -1 (Q), 0, 1 (E)
 let fine = false;
 let charge = 0;
-let charging: null | { by: 'space'; started: number } = null;
+let charging: null | { by: 'space' | 'tap'; started: number; y0: number } = null;
 const TURN_SPEED = Math.PI / 3; // radians per second (60°/s); Shift: a quarter of that
-const CHARGE_MS = 1300; // Space: empty to full, then back down, so you time the release
+const CHARGE_MS = 1600; // Space: empty to full, then it stays full until you let go
+const TAP_MIN = 0.03; // a tap pulled less than this (or pushed back up) doesn't pour
 
 function clampAngle(a: number) {
   // Keep aims pointing up the bar (between nearly flat left and nearly flat right).
   const deg = (a * 180) / Math.PI;
   return (Math.max(-178, Math.min(-2, deg > 90 ? deg - 360 : deg)) * Math.PI) / 180;
 }
-function canShoot() { return mode === 'play' && sim.status === 'aiming' && sim.poursLeft > 0 && !drag; }
-function shootCharged() {
+function canShoot() { return mode === 'play' && sim.status === 'aiming' && sim.poursLeft > 0 && !introOpen; }
+function cancelCharge() {
+  charging = null; charge = 0;
+  tapEl.classList.remove('grab');
+  showPower(0, true);
+}
+function shootCharged(min: number) {
   const power = charge;
-  charging = null;
-  charge = 0;
-  // A quick Space tap (e.g. mashing to restart) doesn't pour.
-  if (power < 0.1 || !canShoot()) { showPower(0, true); return; }
+  cancelCharge();
+  // A quick Space tap (e.g. mashing to restart) or a tap pushed back up doesn't pour.
+  if (power < min || !canShoot()) return;
   if (sim.fire(aimAngle, power, spin)) {
     recorded = [...sim.shots];
     slowSteps = SLOW_STEPS;
@@ -809,37 +852,33 @@ function shootCharged() {
   }
 }
 
-
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|BUTTON)$/.test(e.target.tagName) && e.code === 'Space') return;
   const k = e.key.toLowerCase();
   if ((k === 'q' || k === 'e' || e.code === 'Space') && mode === 'play') { if (introOpen) closeIntro(); }
-  if (k === 'q' || k === 'e') { turning = k === 'q' ? -1 : 1; aimShown = true; fine = e.shiftKey; e.preventDefault(); }
+  if (k === 'q' || k === 'e') { turning = k === 'q' ? -1 : 1; fine = e.shiftKey; e.preventDefault(); }
   if (e.key === 'Shift') fine = true;
   if (e.code === 'Space') {
     e.preventDefault();
     // Didn't finish the night? Space starts it again straight away, even before the card shows.
     if (!e.repeat && mode === 'play' && (sim.status === 'failed' || sim.status === 'out')) { loadLevel(levelIndex); return; }
-    if (!e.repeat && canShoot() && !charging) { aimShown = true; charging = { by: 'space', started: performance.now() }; }
+    if (!e.repeat && canShoot() && !charging) charging = { by: 'space', started: performance.now(), y0: 0 };
   }
-  if (e.key === 'Escape' && charging) { charging = null; charge = 0; showPower(0, true); }
+  if (e.key === 'Escape' && charging) cancelCharge();
 });
 window.addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
   if ((k === 'q' && turning === -1) || (k === 'e' && turning === 1)) turning = 0;
   if (e.key === 'Shift') fine = false;
-  if (e.code === 'Space' && charging?.by === 'space') { e.preventDefault(); shootCharged(); }
+  if (e.code === 'Space' && charging?.by === 'space') { e.preventDefault(); shootCharged(0.1); }
 });
 
-/** Called every frame: turn the aim, grow the Space charge, and show the guideline. */
+/** Called every frame: turn the aim, slide the tap down while Space is held, and show the guideline. */
 function updatePoolControls(dt: number, now: number) {
   if (turning) aimAngle = clampAngle(aimAngle + turning * TURN_SPEED * (fine ? 0.25 : 1) * (dt / 1000));
-  if (charging?.by === 'space') {
-    const t = ((now - charging.started) % (CHARGE_MS * 2)) / CHARGE_MS;
-    charge = t <= 1 ? t : 2 - t; // up to full, then back down
-  }
-  if (charging) showPower(charge, false);
-  if (!drag && !lesson) aim = (aimShown || charging) && canShoot() ? { angle: aimAngle, power: charge } : aim && drag ? aim : null;
+  if (charging?.by === 'space') { charge = Math.min(1, (now - charging.started) / CHARGE_MS); showPower(charge, false); }
+  // The guideline is always up while you can pour; the bartender's hand pulls back with the tap.
+  if (!lesson) aim = canShoot() ? { angle: aimAngle, power: charging ? charge : 0 } : null;
 }
 
 /** When the last pour stopped just outside its circle, says which way it was off. */
@@ -1050,6 +1089,7 @@ function frame(now: number) {
       hideCoach();
       lesson = null;
       sim.fire(shot.angle, shot.power, shot.spin);
+      showPower(shot.power, true);
       slowSteps = SLOW_STEPS;
       updateHud();
     }

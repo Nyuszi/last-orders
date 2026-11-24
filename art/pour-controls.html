@@ -1,0 +1,581 @@
+<title>Last Orders Pour Controls</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: a short case up top, then three playable phones side by side (stacked on a phone), then a comparison. One dark saloon look, same tokens as the game. */
+:root {
+  color-scheme: dark;
+  --bg: #1d110b;
+  --panel: #2e1c12;
+  --card: #3a2518;
+  --line: #5a3a24;
+  --ink: #1a0f0a;
+  --wood: #6b4226;
+  --cream: #f3e6cc;
+  --muted: #cdb894;
+  --brass: #d9a441;
+  --brass-light: #f6dc8f;
+  --amber: #f2b53a;
+  --blue: #7cc2f0;
+  --danger: #e8664a;
+  --green: #6dbb4a;
+  --px: 3px;
+  --head: 'Silkscreen', 'Courier New', monospace;
+  --body: 'Pixelify Sans', 'Trebuchet MS', sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--cream); font-family: var(--body); }
+body { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 48px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: var(--px) solid var(--amber); outline-offset: 2px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+
+header { display: flex; flex-direction: column; gap: 10px; }
+.eyebrow { font-family: var(--head); font-size: 11px; letter-spacing: 0.08em; color: var(--amber); margin: 0; }
+h1 { font-family: var(--head); font-size: clamp(24px, 4vw, 36px); margin: 0; line-height: 1.05; text-wrap: balance; }
+h2 { font-family: var(--head); font-size: 16px; margin: 0; letter-spacing: 0.03em; }
+p { margin: 0; line-height: 1.4; font-size: 16px; max-width: 68ch; }
+.muted { color: var(--muted); }
+
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.split > div { background: var(--panel); border: var(--px) solid var(--ink); box-shadow: inset -3px -3px 0 #00000055, inset 3px 3px 0 #ffffff10; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.split .tag { font-family: var(--head); font-size: 10px; color: var(--ink); background: var(--muted); padding: 2px 6px; align-self: flex-start; }
+.split .tag.new { background: var(--amber); }
+@media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.seg { display: inline-flex; border: var(--px) solid var(--ink); }
+.seg button { border: 0; background: var(--card); padding: 7px 10px; font-family: var(--head); font-size: 10px; }
+.seg button[aria-pressed="true"] { background: var(--amber); color: var(--ink); }
+.toolbar .muted { font-size: 14px; }
+
+.phones { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; justify-items: center; }
+.opt { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 340px; }
+.opt-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.opt-head .n { font-family: var(--head); font-size: 11px; color: var(--muted); }
+.pick { font-family: var(--head); font-size: 9px; background: var(--green); color: var(--ink); padding: 2px 5px; border: 2px solid var(--ink); }
+.opt > p { font-size: 15px; color: var(--muted); }
+
+.phone { width: 320px; max-width: 100%; background: #0d0704; border: var(--px) solid var(--ink); box-shadow: 0 0 0 3px var(--line), 6px 6px 0 #000; padding: 8px; display: flex; flex-direction: column; gap: 6px; user-select: none; -webkit-user-select: none; }
+.p-top { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px; font-family: var(--head); font-size: 9px; color: var(--muted); }
+.p-top b { color: var(--amber); font-weight: 700; }
+.stage { display: flex; gap: 6px; position: relative; }
+canvas.bar { display: block; touch-action: none; border: var(--px) solid var(--ink); cursor: crosshair; }
+.toast { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: var(--ink); border: 2px solid var(--line); padding: 5px 8px; font-size: 13px; white-space: nowrap; pointer-events: none; transition: opacity .3s steps(3); }
+.toast.off { opacity: 0; }
+.p-bottom { background: var(--panel); border: var(--px) solid var(--ink); padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 72px; }
+.readout { display: flex; flex-direction: column; gap: 2px; }
+.readout .lbl { font-family: var(--head); font-size: 8px; color: var(--muted); }
+.readout .val { font-family: var(--head); font-size: 14px; color: var(--cream); font-variant-numeric: tabular-nums; min-width: 5ch; }
+.readout .word { font-size: 12px; color: var(--amber); }
+.spinchip { font-family: var(--head); font-size: 9px; border: 2px solid var(--ink); background: var(--card); padding: 5px 7px; color: var(--muted); }
+
+/* 1. Tap handle */
+/* Every size is in sprite pixels times --s: 1.5 on phones (3 device px per sprite px on a 2x screen), 2 on desktop. */
+.tap { --s: 1.5; --slot-h: 315px; position: relative; width: calc(44px * var(--s)); flex: 0 0 auto; background: var(--panel); border: var(--px) solid var(--ink); touch-action: none; cursor: grab; overflow: hidden; }
+.tap img { position: absolute; left: 50%; transform: translateX(-50%); image-rendering: pixelated; pointer-events: none; }
+.tap .t-top { top: 0; width: calc(34px * var(--s)); height: calc(41px * var(--s)); z-index: 2; }
+.tap .t-tray { bottom: 0; width: calc(46px * var(--s)); height: calc(37px * var(--s)); z-index: 2; }
+.tap .column { position: absolute; left: 50%; transform: translateX(-50%); top: calc(38px * var(--s)); bottom: calc(34px * var(--s)); width: calc(16px * var(--s)); background: url(new-sprites/tap-mid.png) repeat-y; background-size: calc(16px * var(--s)) calc(4px * var(--s)); image-rendering: pixelated; z-index: 1; }
+/* Strength scale in the slot: five stepped bands (nudge, soft, medium, firm, hard), dim until the beer fills them. */
+.tap .slot { position: absolute; left: 50%; top: calc(30px * var(--s)); bottom: calc(26.7px * var(--s)); width: calc(8px * var(--s)); transform: translateX(-50%); z-index: 3; border: 2px solid #1a0f0a;
+  background: linear-gradient(#2c4420 0 25%, #46491f 25% 45%, #5a4318 45% 65%, #553117 65% 85%, #55251b 85%); }
+.tap .foam { position: absolute; left: 50%; top: calc(30px * var(--s) + 2px); width: calc(8px * var(--s) - 4px); transform: translateX(-50%); height: 0; z-index: 3; border-bottom: 0 solid #f3e6cc;
+  background: linear-gradient(#6dbb4a 0 25%, #b5c94a 25% 45%, #f2b53a 45% 65%, #e88a3a 65% 85%, #e8664a 85%) 0 0 / 100% var(--slot-h) no-repeat; }
+.tap .ticks { position: absolute; right: 2px; top: calc(30px * var(--s) + 2px); bottom: calc(28px * var(--s)); align-items: flex-end; display: flex; flex-direction: column; justify-content: space-between; font-family: var(--head); font-size: 7px; color: var(--muted); pointer-events: none; z-index: 3; }
+/* The knob hangs left of the column; only its brass pin crosses the slot, level with the beer. JS sets its top. */
+.tap .handle { position: absolute; left: calc(1px * var(--s)); top: calc(24.5px * var(--s) + 2px); transform: none; width: calc(27px * var(--s)); height: calc(11px * var(--s)); z-index: 4; }
+.tap .handle.back { transition: top .25s steps(5); }
+.tap.grab { cursor: grabbing; }
+
+/* Desktop mockup: info panel | tap at 2x | bar, like the game's desktop layout. Scrolls sideways on narrow screens. */
+.deskscroll { overflow-x: auto; padding: 4px 10px 12px 4px; }
+.desk { width: 880px; display: grid; grid-template-columns: 1fr auto 352px; gap: 16px; align-items: stretch; padding: 16px; background: #0d0704; border: var(--px) solid var(--ink); box-shadow: 0 0 0 3px var(--line), 6px 6px 0 #000; user-select: none; -webkit-user-select: none; }
+.desk:focus-visible { outline: var(--px) solid var(--amber); outline-offset: 4px; }
+.d-panel { display: flex; flex-direction: column; justify-content: center; gap: 12px; min-width: 0; }
+.d-title { display: flex; flex-direction: column; gap: 4px; }
+.d-title b { font-family: var(--head); font-size: 22px; color: var(--brass-light); letter-spacing: 0.04em; }
+.d-title span { font-family: var(--head); font-size: 9px; color: var(--muted); }
+.d-card { background: var(--panel); border: var(--px) solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.d-card .lbl { font-family: var(--head); font-size: 8px; color: var(--amber); }
+.d-card p { font-size: 14px; }
+.d-chip { align-self: flex-start; font-family: var(--head); font-size: 9px; background: var(--amber); color: var(--ink); padding: 3px 6px; border: 2px solid var(--ink); }
+.d-row { flex-direction: row; align-items: center; justify-content: space-between; }
+.d-keys { font-size: 13px; color: var(--muted); line-height: 1.9; }
+.d-keys kbd { font-family: var(--head); font-size: 9px; padding: 1px 5px; border: 2px solid var(--ink); background: var(--card); color: var(--cream); }
+.tap.d-tap { --s: 2; }
+.d-bar { position: relative; }
+.d-bar canvas.bar { width: 340px; height: 488px; }
+
+/* 2. Hold to pour */
+.hold { display: flex; align-items: center; gap: 8px; border: var(--px) solid var(--ink); background: var(--amber); color: var(--ink); padding: 6px 12px 6px 8px; font-family: var(--head); font-size: 11px; touch-action: none; box-shadow: inset -3px -3px 0 #00000040, inset 3px 3px 0 #ffffff40; }
+.hold.down { background: var(--brass-light); box-shadow: inset 3px 3px 0 #00000040; }
+.hold svg { display: block; }
+
+/* 3. Valve dial */
+.dialwrap { display: flex; align-items: center; gap: 8px; }
+.dial { width: 74px; height: 74px; touch-action: none; cursor: grab; display: block; }
+.send { border: var(--px) solid var(--ink); background: var(--amber); color: var(--ink); font-family: var(--head); font-size: 11px; padding: 10px 10px; box-shadow: inset -3px -3px 0 #00000040, inset 3px 3px 0 #ffffff40; }
+.send:active { box-shadow: inset 3px 3px 0 #00000040; }
+.send:disabled { opacity: .45; cursor: default; }
+
+.ideas { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.idea { background: var(--panel); border: 2px solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.idea b { font-family: var(--head); font-size: 11px; color: var(--cream); font-weight: 700; }
+.idea span { font-size: 14px; color: var(--muted); line-height: 1.35; }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 15px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 2px solid var(--line); vertical-align: top; }
+th { font-family: var(--head); font-size: 10px; color: var(--muted); font-weight: 400; }
+td:first-child { font-family: var(--head); font-size: 11px; white-space: nowrap; }
+.good { color: var(--green); } .meh { color: var(--amber); } .bad { color: var(--danger); }
+section { display: flex; flex-direction: column; gap: 12px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">LAST ORDERS · PLAYTEST ROUND 2</p>
+    <h1>Split the aim from the pour</h1>
+    <p>Friends still found the pour too sensitive. The cause is that one finger does two jobs: the direction of the drag sets the aim and its length sets the strength. Any wobble while you pull for strength also swings the aim, and the other way round.</p>
+  </header>
+
+  <div class="split">
+    <div><span class="tag">NOW</span><p>Drag back anywhere on the bar. Angle is aim, length is strength. Let go to pour.</p></div>
+    <div><span class="tag new">PROPOSAL</span><p>Touch and drag on the bar only aims, and lifting the finger never pours. Strength gets its own control at the edge of the screen, the way 8 Ball Pool has a separate power stick.</p></div>
+  </div>
+
+  <section>
+    <div class="toolbar">
+      <span class="seg" role="group" aria-label="Aim style">
+        <button type="button" id="aim-point" aria-pressed="true">POINT AT FINGER</button>
+        <button type="button" id="aim-swipe" aria-pressed="false">SWIPE TO TURN</button>
+      </span>
+      <span class="muted" id="aim-note">The line points from the glass to your finger. Touch far up the bar for finer aim.</span>
+    </div>
+
+    <div class="phones">
+      <div class="opt">
+        <div class="opt-head"><span class="n">A</span><h2>Beer tap handle</h2><span class="pick">MY PICK</span></div>
+        <p>Pull the tap handle down to set strength and let go to pour. The full pull runs the whole height of the bar, about twice today's 240 units. Push it back to the top to cancel.</p>
+        <div class="phone" data-kind="tap">
+          <div class="p-top"><span>NIGHT 1</span><span>TIPS <b class="tips">0¢</b></span></div>
+          <div class="stage">
+            <canvas class="bar" width="228" height="400" style="width:228px;height:400px"></canvas>
+            <div class="tap" aria-label="Tap handle: drag down to set strength, let go to pour" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+              <img class="t-top" src="new-sprites/tap-top.png" alt="">
+              <div class="column"></div>
+              <img class="t-tray" src="new-sprites/tap-tray.png" alt="">
+              <div class="slot"></div><div class="foam"></div>
+              <div class="ticks"><span>0</span><span>¼</span><span>½</span><span>¾</span><span>1</span></div>
+              <img class="handle" src="new-sprites/tap-knob.png" alt="">
+            </div>
+            <div class="toast off"></div>
+          </div>
+          <div class="p-bottom">
+            <div class="readout"><span class="lbl">STRENGTH</span><span class="val">0%</span><span class="word">pull the tap</span></div>
+            <span class="spinchip">SPIN OFF</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="opt">
+        <div class="opt-head"><span class="n">B</span><h2>Hold to fill</h2></div>
+        <p>Hold the button and the shot glass fills at a steady rate, full in 2 seconds. Let go to pour. Slide off the button to cancel. Nothing to drag, so a shaky thumb can't change anything.</p>
+        <div class="phone" data-kind="hold">
+          <div class="p-top"><span>NIGHT 1</span><span>TIPS <b class="tips">0¢</b></span></div>
+          <div class="stage">
+            <canvas class="bar" width="300" height="400" style="width:300px;height:400px"></canvas>
+            <div class="toast off"></div>
+          </div>
+          <div class="p-bottom">
+            <div class="readout"><span class="lbl">STRENGTH</span><span class="val">0%</span><span class="word">hold to fill</span></div>
+            <button type="button" class="hold" aria-label="Hold to fill the glass, let go to pour">
+              <svg width="30" height="40" viewBox="0 0 15 20" shape-rendering="crispEdges">
+                <rect x="1" y="1" width="13" height="18" fill="#1a0f0a"/><rect x="2" y="2" width="11" height="16" fill="#cbe7f9" opacity=".35"/>
+                <rect class="fill" x="2" y="18" width="11" height="0" fill="#d9a441"/><rect class="foamtop" x="2" y="18" width="11" height="0" fill="#f6dc8f"/>
+                <rect x="2" y="2" width="1" height="16" fill="#ffffff" opacity=".5"/>
+              </svg>
+              <span>HOLD<br>TO POUR</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="opt">
+        <div class="opt-head"><span class="n">C</span><h2>Keg valve + bell</h2></div>
+        <p>Turn the valve wheel to set strength. It stays where you leave it, so you can check it before you commit. Ring the bell to pour. The slowest option and the most exact, and a repeat pour is one tap.</p>
+        <div class="phone" data-kind="dial">
+          <div class="p-top"><span>NIGHT 1</span><span>TIPS <b class="tips">0¢</b></span></div>
+          <div class="stage">
+            <canvas class="bar" width="300" height="400" style="width:300px;height:400px"></canvas>
+            <div class="toast off"></div>
+          </div>
+          <div class="p-bottom">
+            <div class="readout"><span class="lbl">STRENGTH</span><span class="val">0%</span><span class="word">turn the valve</span></div>
+            <div class="dialwrap">
+              <svg class="dial" viewBox="0 0 74 74" role="slider" aria-label="Valve wheel: turn clockwise for more strength" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+                <circle cx="37" cy="37" r="35" fill="#1a0f0a"/>
+                <path class="arc-bg" fill="none" stroke="#3a2a20" stroke-width="6"/>
+                <path class="arc" fill="none" stroke="#f2b53a" stroke-width="6"/>
+                <g class="wheel">
+                  <circle cx="37" cy="37" r="20" fill="none" stroke="#b8352a" stroke-width="5"/>
+                  <rect x="35" y="17" width="4" height="40" fill="#b8352a"/><rect x="17" y="35" width="40" height="4" fill="#b8352a"/>
+                  <circle cx="37" cy="37" r="5" fill="#d9a441"/>
+                  <circle cx="37" cy="17" r="3" fill="#f6dc8f"/>
+                </g>
+              </svg>
+              <button type="button" class="send">🔔<br>POUR</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="opt-head"><span class="n">A</span><h2>Beer tap on desktop</h2></div>
+    <p class="muted">The tap takes the place of the PULL meter between the info panel and the bar, full height, drawn at 2× so the pixels stay square on a normal monitor. With the mouse, aim on the bar and drag the knob down. With the keyboard, click the screen below, then use Q / E to aim and hold Space: the knob slides down by itself and you let go to pour.</p>
+    <div class="deskscroll">
+      <div class="desk" data-kind="tap-desk" tabindex="0" aria-label="Desktop mockup: click, then Q and E to aim, hold Space to pull the tap">
+        <div class="d-panel">
+          <div class="d-title"><b>LAST ORDERS</b><span>NIGHT 1 · TWO DRIFTERS</span></div>
+          <div class="d-card">
+            <span class="lbl">TONIGHT'S ORDERS</span>
+            <p>Dutch, Two-Fist and the sheriff want drinks.</p>
+            <span class="d-chip">NOW: SHERIFF · WHISKEY</span>
+          </div>
+          <div class="d-card d-row">
+            <div class="readout"><span class="lbl">STRENGTH</span><span class="val">0%</span><span class="word">pull the tap</span></div>
+            <div class="readout"><span class="lbl">TIPS</span><span class="val tips">0¢</span></div>
+            <span class="spinchip">SPIN OFF</span>
+          </div>
+          <div class="d-keys"><kbd>Q</kbd><kbd>E</kbd> aim · hold <kbd>SPACE</kbd> to pull the tap, let go to pour · <kbd>SHIFT</kbd> fine aim · <kbd>ESC</kbd> cancel</div>
+        </div>
+        <div class="tap d-tap" aria-label="Tap handle: drag down to set strength, let go to pour" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <img class="t-top" src="new-sprites/tap-top.png" alt="">
+          <div class="column"></div>
+          <img class="t-tray" src="new-sprites/tap-tray.png" alt="">
+          <div class="slot"></div><div class="foam"></div>
+          <div class="ticks"><span>0</span><span>¼</span><span>½</span><span>¾</span><span>1</span></div>
+          <img class="handle" src="new-sprites/tap-knob.png" alt="">
+        </div>
+        <div class="d-bar">
+          <canvas class="bar" width="340" height="488" style="width:340px;height:488px"></canvas>
+          <div class="toast off"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Other things that could stand in for the cue</h2>
+    <div class="ideas">
+      <div class="idea"><b>Bartender's arm</b><span>The forearm already drawn behind the glass becomes a lever at the side: pull it back like a shuffleboard push. Same feel as A, but less clear as a control.</span></div>
+      <div class="idea"><b>Slot-machine lever</b><span>A saloon one-armed bandit on the wall. Fun, but pulling down to throw forward reads backwards.</span></div>
+      <div class="idea"><b>Bell rope</b><span>Pull a rope hanging from the ceiling. Works like A, but a rope on the bar side hides the customers.</span></div>
+      <div class="idea"><b>Swing meter</b><span>A needle sweeps back and forth and you tap to stop it, golf-game style. It rewards timing instead of judgement and would make the game feel harder, not calmer.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>How they compare</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>OPTION</th><th>SHAKE-PROOF</th><th>SPEED</th><th>ONE THUMB</th><th>FITS THE SALOON</th><th>RISK</th></tr></thead>
+        <tbody>
+          <tr><td>Now</td><td class="bad">No</td><td class="good">Fast</td><td class="good">Yes</td><td class="meh">A pool cue</td><td>The complaint</td></tr>
+          <tr><td>A · Tap</td><td class="good">Yes</td><td class="good">Fast</td><td class="meh">Thumb + finger</td><td class="good">Very</td><td>Takes 50px of width on phones</td></tr>
+          <tr><td>B · Hold</td><td class="good">Fully</td><td class="meh">Up to 2 s</td><td class="good">Yes</td><td class="good">Yes</td><td>Overshoot means cancel and refill</td></tr>
+          <tr><td>C · Valve</td><td class="good">Fully</td><td class="bad">Slowest</td><td class="good">Yes</td><td class="good">Yes</td><td>Two steps feel fussy for easy pours</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">For all three: the keyboard keeps Q / E to aim and Space to pull, which already works this way. The spin glass stays in the bottom bar. "Show me how" would animate the new control instead of the pulling hand.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+  let aimStyle = 'point';
+  const notes = {
+    point: 'The line points from the glass to your finger. Touch far up the bar for finer aim.',
+    swipe: 'Drag sideways anywhere on the bar to turn the line slowly. Where you touch doesn\'t matter.'
+  };
+  const bP = document.getElementById('aim-point'), bS = document.getElementById('aim-swipe');
+  function setStyle(s) { aimStyle = s; bP.setAttribute('aria-pressed', s === 'point'); bS.setAttribute('aria-pressed', s === 'swipe'); document.getElementById('aim-note').textContent = notes[s]; }
+  bP.onclick = () => setStyle('point'); bS.onclick = () => setStyle('swipe');
+
+  const WORDS = [[0.02, 'cancel'], [0.25, 'nudge'], [0.45, 'soft'], [0.65, 'medium'], [0.85, 'firm'], [1.01, 'hard']];
+  const word = (p) => WORDS.find(([m]) => p < m)[1];
+  // Same five bands as the tap slot: green for a nudge up to red for a hard pour.
+  const BANDS = [[0.25, '#6dbb4a'], [0.45, '#b5c94a'], [0.65, '#f2b53a'], [0.85, '#e88a3a'], [1.01, '#e8664a']];
+  const band = (p) => BANDS.find(([m]) => p < m)[1];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function makeBar(phone) {
+    const cv = phone.querySelector('canvas.bar');
+    const W = cv.width, H = cv.height, dpr = Math.min(2, devicePixelRatio || 1);
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    const RAIL = 14, R = 9, L = RAIL + R, Rt = W - RAIL - R;
+    const start = { x: W / 2, y: H - 34 };
+    const targets = [
+      { x: W * 0.30, y: H * 0.22, r: 17, label: 'DUTCH' },
+      { x: W * 0.70, y: H * 0.42, r: 17, label: 'TWO-FIST' },
+      { x: W * 0.36, y: H * 0.60, r: 17, label: 'SHERIFF' },
+    ];
+    const st = { angle: -Math.PI / 2, power: 0, drink: { ...start }, v: null, served: new Set(), tips: 0, rolling: false };
+    const toastEl = phone.querySelector('.toast'), tipsEl = phone.querySelector('.tips');
+    let toastT = 0;
+    function toast(t) { toastEl.textContent = t; toastEl.classList.remove('off'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.add('off'), 1300); }
+
+    const clampA = (a) => Math.max(-Math.PI + 0.12, Math.min(-0.12, a));
+    let down = null;
+    cv.addEventListener('pointerdown', (e) => { if (st.rolling) return; cv.setPointerCapture(e.pointerId); down = { x: e.offsetX, a: st.angle }; aimTo(e); });
+    cv.addEventListener('pointermove', (e) => { if (down) aimTo(e); });
+    const up = () => { down = null; };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    function aimTo(e) {
+      if (aimStyle === 'point') {
+        const dx = e.offsetX - st.drink.x, dy = e.offsetY - st.drink.y;
+        if (Math.hypot(dx, dy) > 14) st.angle = clampA(Math.atan2(dy, dx));
+      } else {
+        st.angle = clampA(down.a + (e.offsetX - down.x) * 0.004);
+      }
+    }
+
+    function fire(power) {
+      if (st.rolling || power < 0.02) return false;
+      const A = 300, D = power * H * 1.15, v = Math.sqrt(2 * A * D);
+      st.v = { x: Math.cos(st.angle) * v, y: Math.sin(st.angle) * v, A };
+      st.rolling = true;
+      return true;
+    }
+
+    function step(dt) {
+      if (!st.rolling) return;
+      const d = st.drink, v = st.v;
+      for (let i = 0; i < 4; i++) {
+        const h = dt / 4, sp = Math.hypot(v.x, v.y);
+        if (sp < 4) { stop(); return; }
+        const ns = Math.max(0, sp - v.A * h), k = ns / sp;
+        v.x *= k; v.y *= k;
+        d.x += v.x * h; d.y += v.y * h;
+        if (d.x < L) { d.x = L; v.x = -v.x * 0.8; }
+        if (d.x > Rt) { d.x = Rt; v.x = -v.x * 0.8; }
+        if (d.y < RAIL + R) { d.y = RAIL + R; v.x *= 0.12; v.y = 0; }
+        if (d.y > H - R) { d.y = H - R; v.y = -v.y * 0.5; }
+      }
+    }
+    function stop() {
+      st.rolling = false;
+      const d = st.drink;
+      const hit = targets.findIndex((t, i) => !st.served.has(i) && Math.hypot(t.x - d.x, t.y - d.y) < t.r);
+      if (hit >= 0) {
+        const t = targets[hit], perfect = Math.hypot(t.x - d.x, t.y - d.y) < 5;
+        st.served.add(hit); st.tips += perfect ? 75 : 50; tipsEl.textContent = st.tips + '¢';
+        toast(perfect ? `Perfect pour! ${t.label} +75¢` : `Served ${t.label} +50¢`);
+      } else toast('Missed. Try again');
+      setTimeout(() => {
+        st.drink = { ...start };
+        if (st.served.size === targets.length) { st.served.clear(); toast('Everyone served. Next round'); }
+      }, 900);
+    }
+
+    function guide() {
+      // Dotted line to the first rail, then a short bounce stub. Doesn't show distance.
+      let x = st.drink.x, y = st.drink.y, dx = Math.cos(st.angle), dy = Math.sin(st.angle);
+      const pts = [[x, y]];
+      let left = 420;
+      for (let b = 0; b < 2 && left > 0; b++) {
+        let tx = dx < 0 ? (L - x) / dx : dx > 0 ? (Rt - x) / dx : Infinity;
+        let ty = (RAIL + R - y) / dy;
+        let t = Math.min(tx, ty, b === 0 ? left : 46);
+        x += dx * t; y += dy * t; left -= t; pts.push([x, y]);
+        if (t === tx) dx = -dx; else break;
+      }
+      return pts;
+    }
+
+    function draw() {
+      g.clearRect(0, 0, W, H);
+      // counter planks
+      g.fillStyle = '#6b4226'; g.fillRect(0, 0, W, H);
+      for (let px = RAIL; px < W - RAIL; px += 24) { g.fillStyle = (px / 24) % 2 < 1 ? '#734729' : '#663f24'; g.fillRect(px, 0, 23, H); g.fillStyle = '#4a2c18'; g.fillRect(px + 23, 0, 1, H); }
+      // rails
+      g.fillStyle = '#1a0f0a'; g.fillRect(0, 0, RAIL, H); g.fillRect(W - RAIL, 0, RAIL, H);
+      g.fillStyle = '#d9a441'; g.fillRect(3, 0, RAIL - 6, H); g.fillRect(W - RAIL + 3, 0, RAIL - 6, H);
+      g.fillStyle = '#f6dc8f'; g.fillRect(4, 0, 2, H); g.fillRect(W - RAIL + 4, 0, 2, H);
+      g.fillStyle = '#3a2214'; g.fillRect(0, 0, W, RAIL);
+      // targets
+      targets.forEach((t, i) => {
+        const done = st.served.has(i);
+        g.strokeStyle = done ? '#6dbb4a' : '#f3e6cc'; g.lineWidth = 2;
+        g.setLineDash(done ? [] : [4, 4]); g.beginPath(); g.arc(t.x, t.y, t.r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+        g.fillStyle = done ? '#6dbb4a' : '#f3e6cc'; g.font = '700 8px Silkscreen, monospace'; g.textAlign = 'center';
+        g.fillText(done ? 'SERVED' : t.label, t.x, t.y - t.r - 5);
+      });
+      // guideline
+      if (!st.rolling) {
+        const pts = guide();
+        g.strokeStyle = '#f3e6cc'; g.lineWidth = 2; g.setLineDash([3, 5]);
+        g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); pts.slice(1).forEach(p => g.lineTo(p[0], p[1])); g.stroke(); g.setLineDash([]);
+        const e = pts[pts.length - 1];
+        if (pts.length > 2) { const m = pts[1]; g.strokeStyle = '#f3e6cc88'; g.beginPath(); g.arc(m[0], m[1], R, 0, Math.PI * 2); g.stroke(); }
+        // strength preview: a bar under the glass
+        if (st.power > 0) { g.fillStyle = '#1a0f0a'; g.fillRect(st.drink.x - 22, st.drink.y + 15, 44, 6); g.fillStyle = band(st.power); g.fillRect(st.drink.x - 21, st.drink.y + 16, 42 * st.power, 4); }
+      }
+      // drink
+      const d = st.drink;
+      g.fillStyle = '#00000055'; g.beginPath(); g.ellipse(d.x + 2, d.y + 3, R, R * 0.8, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#1a0f0a'; g.beginPath(); g.arc(d.x, d.y, R, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#cbe7f9'; g.beginPath(); g.arc(d.x, d.y, R - 2, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#d9a441'; g.beginPath(); g.arc(d.x, d.y, R - 4, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#ffffffaa'; g.fillRect(d.x - 4, d.y - 5, 2, 3);
+    }
+
+    let last = performance.now();
+    function loop(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; step(dt); draw(); requestAnimationFrame(loop); }
+    requestAnimationFrame(loop);
+    return { st, fire, toast };
+  }
+
+  function readout(phone, p, hint) {
+    phone.querySelector('.readout .val').textContent = Math.round(p * 100) + '%';
+    const w = phone.querySelector('.readout .word');
+    w.textContent = hint || word(p);
+    w.style.color = hint || p < 0.02 ? '' : band(p);
+  }
+
+  // A · Tap handle, shared by the phone and the desktop mockups.
+  function setupTap(root) {
+    const bar = makeBar(root);
+    const tap = root.querySelector('.tap'), handle = tap.querySelector('.handle'), foam = tap.querySelector('.foam');
+    const s = () => parseFloat(getComputedStyle(tap).getPropertyValue('--s')) || 1.5;
+    const slotTop = () => 30 * s() + 2; // inside the slot's 2px border
+    const slotH = () => tap.clientHeight - 30 * s() - 26.7 * s() - 4;
+    let held = null; // 'mouse' (dragging the knob) or 'key' (holding Space)
+    function show(p) {
+      handle.style.top = (slotTop() - 5.5 * s() + p * slotH()) + 'px';
+      tap.style.setProperty('--slot-h', slotH() + 'px');
+      foam.style.height = (p * slotH()) + 'px';
+      foam.style.borderBottomWidth = p > 0.01 ? '3px' : '0';
+      tap.setAttribute('aria-valuenow', Math.round(p * 100));
+      bar.st.power = p; readout(root, p);
+    }
+    function grab(how) { if (bar.st.rolling || held) return false; held = how; handle.classList.remove('back'); tap.classList.add('grab'); return true; }
+    function release(fireIt) {
+      if (!held) return; held = null; tap.classList.remove('grab');
+      const p = bar.st.power, poured = fireIt && p >= 0.02;
+      if (poured) bar.fire(p); else if (p > 0) bar.toast('Cancelled');
+      handle.classList.add('back'); show(0);
+      readout(root, 0, poured ? `last: ${Math.round(p * 100)}%` : 'pull the tap');
+    }
+    let y0 = 0;
+    tap.addEventListener('pointerdown', (e) => { if (grab('mouse')) { tap.setPointerCapture(e.pointerId); y0 = e.clientY; } });
+    tap.addEventListener('pointermove', (e) => { if (held === 'mouse') show(Math.max(0, Math.min(1, (e.clientY - y0) / slotH()))); });
+    tap.addEventListener('pointerup', () => { if (held === 'mouse') release(true); });
+    tap.addEventListener('pointercancel', () => { if (held === 'mouse') release(false); });
+    requestAnimationFrame(() => show(0));
+    return { bar, show, grab, release, isHeld: (how) => held === how };
+  }
+  setupTap(document.querySelector('[data-kind="tap"]'));
+
+  // Desktop: the mouse drags the knob or aims on the bar; Q / E turn the aim, hold Space to pull the tap down.
+  {
+    const desk = document.querySelector('[data-kind="tap-desk"]'), t = setupTap(desk);
+    const FULL_MS = 1600, TURN = 0.9; // radians per second, a quarter of that with Shift
+    let turning = 0, fine = false, spaceAt = 0, last = performance.now();
+    desk.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'q' || k === 'e') { turning = k === 'q' ? -1 : 1; fine = e.shiftKey; e.preventDefault(); }
+      if (e.code === 'Space') { e.preventDefault(); if (!e.repeat && t.grab('key')) spaceAt = performance.now(); }
+      if (e.key === 'Escape') t.release(false);
+    });
+    desk.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'q' || k === 'e') turning = 0;
+      if (e.key === 'Shift') fine = false;
+      if (e.code === 'Space' && t.isHeld('key')) t.release(true);
+    });
+    desk.addEventListener('blur', () => { turning = 0; t.release(false); });
+    desk.addEventListener('pointerdown', () => desk.focus({ preventScroll: true }));
+    (function loop(now) {
+      const dt = (now - last) / 1000; last = now;
+      if (turning && !t.bar.st.rolling) t.bar.st.angle = Math.max(-Math.PI + 0.12, Math.min(-0.12, t.bar.st.angle + turning * TURN * (fine ? 0.25 : 1) * dt));
+      if (t.isHeld('key')) t.show(Math.min(1, (now - spaceAt) / FULL_MS));
+      requestAnimationFrame(loop);
+    })(last);
+  }
+
+  // B · Hold to fill
+  {
+    const phone = document.querySelector('[data-kind="hold"]'), bar = makeBar(phone);
+    const btn = phone.querySelector('.hold'), fill = btn.querySelector('.fill'), foamtop = btn.querySelector('.foamtop');
+    const FULL_MS = 2000;
+    let t0 = null, raf = 0;
+    function show(p) {
+      const h = 16 * p;
+      fill.setAttribute('y', 18 - h); fill.setAttribute('height', h);
+      foamtop.setAttribute('y', 18 - h); foamtop.setAttribute('height', p > 0 ? 1 : 0);
+      bar.st.power = p; readout(phone, p);
+    }
+    function tick() { if (t0 == null) return; show(Math.min(1, (performance.now() - t0) / FULL_MS)); raf = requestAnimationFrame(tick); }
+    btn.addEventListener('pointerdown', (e) => { if (bar.st.rolling) return; e.preventDefault(); btn.setPointerCapture(e.pointerId); btn.classList.add('down'); t0 = performance.now(); tick(); });
+    function end(fireIt) {
+      if (t0 == null) return; t0 = null; cancelAnimationFrame(raf); btn.classList.remove('down');
+      const p = bar.st.power;
+      if (fireIt && p >= 0.02) bar.fire(p); else if (p > 0) bar.toast('Cancelled');
+      show(0); readout(phone, 0, fireIt && p >= 0.02 ? `last: ${Math.round(p * 100)}%` : 'hold to fill');
+    }
+    btn.addEventListener('pointerup', (e) => {
+      const r = btn.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top - 20 && e.clientY <= r.bottom + 20;
+      end(inside);
+    });
+    btn.addEventListener('pointercancel', () => end(false));
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  // C · Valve + bell
+  {
+    const phone = document.querySelector('[data-kind="dial"]'), bar = makeBar(phone);
+    const dial = phone.querySelector('.dial'), wheel = dial.querySelector('.wheel'), arc = dial.querySelector('.arc'), arcBg = dial.querySelector('.arc-bg');
+    const send = phone.querySelector('.send');
+    const SWEEP = 300 * Math.PI / 180, START = -Math.PI / 2 - SWEEP / 2; // gap at the bottom
+    const C = 37, AR = 31;
+    function arcPath(p) {
+      const a0 = START, a1 = START + SWEEP * p;
+      if (p <= 0.001) return '';
+      const x0 = C + AR * Math.cos(a0), y0 = C + AR * Math.sin(a0), x1 = C + AR * Math.cos(a1), y1 = C + AR * Math.sin(a1);
+      return `M${x0} ${y0} A${AR} ${AR} 0 ${SWEEP * p > Math.PI ? 1 : 0} 1 ${x1} ${y1}`;
+    }
+    arcBg.setAttribute('d', arcPath(1));
+    let p = 0.5;
+    function show() {
+      arc.setAttribute('d', arcPath(p));
+      wheel.setAttribute('transform', `rotate(${p * 300 - 150} 37 37)`);
+      dial.setAttribute('aria-valuenow', Math.round(p * 100));
+      bar.st.power = p; readout(phone, p);
+    }
+    show();
+    let drag = null;
+    const ang = (e) => { const r = dial.getBoundingClientRect(); return Math.atan2(e.clientY - r.top - r.height / 2, e.clientX - r.left - r.width / 2); };
+    dial.addEventListener('pointerdown', (e) => { dial.setPointerCapture(e.pointerId); drag = ang(e); });
+    dial.addEventListener('pointermove', (e) => {
+      if (drag == null) return;
+      const a = ang(e); let d = a - drag; if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
+      drag = a; p = Math.max(0, Math.min(1, p + d / SWEEP)); show();
+    });
+    const up = () => { drag = null; };
+    dial.addEventListener('pointerup', up); dial.addEventListener('pointercancel', up);
+    dial.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { p = Math.min(1, p + 0.01); show(); e.preventDefault(); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { p = Math.max(0, p - 0.01); show(); e.preventDefault(); }
+    });
+    send.addEventListener('click', () => { if (bar.fire(p)) { send.disabled = true; const iv = setInterval(() => { if (!bar.st.rolling) { send.disabled = false; clearInterval(iv); } }, 100); } });
+  }
+})();
+</script>

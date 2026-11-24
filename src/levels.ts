@@ -71,7 +71,7 @@ export const LEVELS: Level[] = [
   {
     id: 'n1', night: 1, title: 'A quiet Monday',
     blurb: 'Two orders. Slide each drink into the dotted circle.',
-    hint: 'Drag back anywhere and let go. Stop the drink inside the glowing circle.',
+    hint: 'Touch the bar to aim, then pull the beer tap down and let go. Stop the drink inside the glowing circle.',
     pours: 4,
     counter: COUNTER,
     rails: [

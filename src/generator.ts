@@ -189,7 +189,7 @@ export function candidate(date: string, attempt: number): Level {
     night: 0,
     title,
     blurb: `${orders.length} orders tonight. ${flavour}`,
-    hint: 'Drag back to pour. Stop each drink inside its dotted circle.',
+    hint: 'Touch the bar to aim, then pull the beer tap down and let go to pour. Stop each drink inside its dotted circle.',
     pours: orders.length + t.spare,
     counter: { ...COUNTER },
     rails: railsFor(rng, t),

@@ -29,13 +29,16 @@
   </section>
 
   <div class="stage" id="stage">
-    <div class="power" id="power" role="meter" aria-label="Pour strength" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-      <span class="power-label">PULL</span>
-      <div class="power-track">
-        <div class="power-meter" id="power-meter"></div>
-      </div>
-      <span class="power-label">HARD</span>
-      <span class="power-val" id="power-val">0%</span>
+    <!-- The beer tap: pull the knob down for strength, let go to pour. Sprites are set in main.ts. -->
+    <div class="tap" id="power" role="slider" aria-label="Beer tap: drag down to set the strength, let go to pour" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <img class="t-top" id="tap-top" alt="">
+      <div class="t-column" id="tap-column"></div>
+      <img class="t-tray" id="tap-tray" alt="">
+      <div class="t-slot"></div>
+      <div class="t-beer" id="tap-beer"></div>
+      <div class="t-last" id="tap-last" hidden></div>
+      <div class="t-ticks" aria-hidden="true"><span>0</span><span>¼</span><span>½</span><span>¾</span><span>1</span></div>
+      <img class="t-knob" id="tap-knob" alt="">
     </div>
     <div class="board" id="board">
       <p class="hint" id="hint" aria-live="polite"></p>
@@ -61,7 +64,7 @@
         </div>
         <p class="howto-tap">Tap anywhere to start</p>
       </div>
-      <canvas id="game" aria-label="The bar, seen from above. Drag back anywhere and release to slide the drink to the customer."></canvas>
+      <canvas id="game" aria-label="The bar, seen from above. Touch or click to aim: the line points from the drink to your finger."></canvas>
     </div>
   </div>
 
@@ -71,7 +74,7 @@
       <div class="bottles" aria-label="Pours left" id="bottles"></div>
       <p class="tips"><span class="small-label">TIPS</span> <span id="tips">0c</span></p>
     </div>
-    <p class="keys" aria-label="Keyboard controls"><kbd>Q</kbd><kbd>E</kbd> aim · hold <kbd>Space</kbd> to pull, release to pour · <kbd>Shift</kbd> fine aim</p>
+    <p class="keys" aria-label="Keyboard controls"><kbd>Q</kbd><kbd>E</kbd> aim · hold <kbd>Space</kbd> to pull the tap, let go to pour · <kbd>Shift</kbd> fine aim</p>
     <button type="button" class="spin-toggle" id="spin-toggle" aria-expanded="false" aria-controls="spin-box">Spin <span id="spin-short">off</span></button>
     <div class="spin" id="spin-box">
       <canvas id="spinpad" width="28" height="28" aria-label="Spin: tap the glass where you want to hit it. Left of centre curves left, right of centre curves right."></canvas>

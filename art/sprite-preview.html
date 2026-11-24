@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sprite preview</title>
+<style>
+  body { margin: 0; padding: 18px; background: #1d110b; color: #f3e6cc; font: 13px system-ui; }
+  h1 { margin: 0 0 12px; font: 700 18px monospace; color: #f6dc8f; }
+  .row { display: flex; gap: 18px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; }
+  figure { margin: 0; display: grid; gap: 6px; justify-items: center; }
+  figcaption { color: #cdb894; font: 12px monospace; }
+  canvas { image-rendering: pixelated; background: #8a5631; border: 2px solid #5a3a24; }
+</style>
+</head>
+<body>
+<h1>NEW SPRITES AT GAME SIZE</h1>
+<div id="out"></div>
+<script type="module">
+// For each new sprite: key out the magenta, crop, shrink to the in-game size, and show it next
+// to the current game sprite, all on a counter-coloured background and blown up so pixels show.
+import { NPC_SPRITES, NPC_PAL } from '/src/sprites.ts';
+const JOBS = [
+  { file: 'npc-sheriff.webp', name: 'Sheriff v1 (top-down)', map: NPC_SPRITES.sheriff, pal: NPC_PAL.sheriff, sizes: [[32, 28]] },
+  { file: 'npc-sheriff-v2.png', name: 'Sheriff v2 (three-quarter)', map: NPC_SPRITES.sheriff, pal: NPC_PAL.sheriff, sizes: [[32, 28]] },
+];
+const isKey = (r, g, b) => r > 140 && b > 140 && g < 120 && Math.abs(r - b) < 100 && (r + b) / 2 - g > 80;
+
+function cutout(img) {
+  const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+  let x0 = c.width, y0 = c.height, x1 = 0, y1 = 0;
+  for (let i = 0; i < p.length; i += 4) {
+    if (isKey(p[i], p[i + 1], p[i + 2])) { p[i + 3] = 0; continue; }
+    const x = (i / 4) % c.width, y = Math.floor(i / 4 / c.width);
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  g.putImageData(d, 0, 0);
+  const o = document.createElement('canvas'); o.width = x1 - x0 + 1; o.height = y1 - y0 + 1;
+  o.getContext('2d').drawImage(c, -x0, -y0);
+  return o;
+}
+/** Shrink by averaging (keeps detail better than skipping pixels), then make alpha hard-edged. */
+function shrink(src, w, h) {
+  let cur = src;
+  while (cur.width / 2 > w * 1.5) {
+    const n = document.createElement('canvas'); n.width = Math.round(cur.width / 2); n.height = Math.round(cur.height / 2);
+    const g = n.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(cur, 0, 0, n.width, n.height); cur = n;
+  }
+  const o = document.createElement('canvas'); o.width = w; o.height = h;
+  const g = o.getContext('2d'); g.imageSmoothingQuality = 'high';
+  // Keep the aspect ratio, centred, like the game places sprites.
+  const s = Math.min(w / cur.width, h / cur.height), dw = cur.width * s, dh = cur.height * s;
+  g.drawImage(cur, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  const d = g.getImageData(0, 0, w, h), p = d.data;
+  for (let i = 3; i < p.length; i += 4) p[i] = p[i] >= 110 ? 255 : 0;
+  g.putImageData(d, 0, 0);
+  return o;
+}
+function fromMap(map, pal) {
+  const c = document.createElement('canvas'); c.width = map[0].length; c.height = map.length;
+  const g = c.getContext('2d');
+  map.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') { g.fillStyle = pal[ch] ?? '#f0f'; g.fillRect(x, y, 1, 1); } }));
+  return c;
+}
+function show(parent, src, caption, zoom) {
+  const c = document.createElement('canvas'); c.width = src.width * zoom; c.height = src.height * zoom;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(src, 0, 0, c.width, c.height);
+  const f = document.createElement('figure'); const cap = document.createElement('figcaption'); cap.textContent = caption;
+  f.append(c, cap); parent.append(f);
+}
+for (const j of JOBS) {
+  const img = new Image(); img.src = `/art/new-sprites/${j.file}?${Date.now()}`; await img.decode();
+  const cut = cutout(img);
+  const row = document.createElement('div'); row.className = 'row';
+  show(row, fromMap(j.map, j.pal), `${j.name}: now (16×14, shown ×2 in game)`, 12);
+  for (const [w, h] of j.sizes) show(row, shrink(cut, w, h), `new at ${w}×${h}${w === 32 ? " (game now)" : w === 64 ? " (phone, full res)" : " (desktop, full res)"}`, 192 / w);
+  document.getElementById('out').append(row);
+}
+window.previewDone = true;
+</script>
+</body>
+</html>

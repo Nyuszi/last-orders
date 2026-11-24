@@ -8,12 +8,12 @@ A new night opens every day at 00:05 UTC. Everyone on Reddit gets the same bar, 
 
 ## How to play
 
-1. **Aim.** Drag back anywhere on the bar, like pulling a pool cue. The guideline shows where the drink goes until it first hits something, including how it bounces off rails, drinks and the peanut bowl. It doesn't show how far the drink will slide.
-2. **Set the strength.** The further you pull, the harder the pour. The bar on the left shows it.
+1. **Aim.** Touch or click the bar: the guideline points from the drink to your finger. Touch further up the bar for finer aim. Lifting your finger never pours. The guideline shows where the drink goes until it first hits something, including how it bounces off rails, drinks and the peanut bowl. It doesn't show how far the drink will slide.
+2. **Set the strength.** Pull the beer tap's knob down its slot (beside the bar). The slot fills with beer from green (a nudge) to red (hard). Push it back to the top to cancel.
 3. **Add spin (optional).** Tap the glass in the corner where you want to hit it. Left of centre curves left, right curves right.
-4. **Let go to pour.** The drink has to come to rest inside the right customer's circle. Dead centre is a perfect pour and earns a bigger tip.
+4. **Let go of the tap to pour.** The drink has to come to rest inside the right customer's circle. Dead centre is a perfect pour and earns a bigger tip. A cream line on the tap marks how far you pulled last time.
 
-On a keyboard: **Q** / **E** to aim (hold **Shift** for fine aim), hold **Space** to pull back and release to pour.
+On a keyboard: **Q** / **E** to aim (hold **Shift** for fine aim), hold **Space** and the tap pulls down by itself; let go to pour. **Esc** cancels.
 
 Tap or hover over anything on the bar to see what it is.
 
