@@ -3,7 +3,8 @@ import { Renderer, W, H, type Aim } from './render';
 import { Sim, STEP_MS, pointInPoly, type Shot, type SimEvent, type Status } from './sim';
 import { SOLUTIONS } from './solutions';
 import { fetchNight, requestedDate } from './daily';
-import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';// Every portrait in assets/portraits is picked up automatically, keyed by its file name
+import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';
+import { sfx, mountSoundPanel, type SfxId } from './audio';// Every portrait in assets/portraits is picked up automatically, keyed by its file name
 // ("<customer>-<mood>.webp"), so new art only has to be dropped into the folder.
 const PORTRAIT_FILES = import.meta.glob<string>('./assets/portraits/*.webp', { eager: true, query: '?inline', import: 'default' });
 // The beer tap's sprites (tower head, column strip, drip tray, knob), inlined like the portraits.
@@ -172,8 +173,10 @@ function setSpinFromPointer(e: PointerEvent) {
   if (len > max) { dx = (dx / len) * max; dy = (dy / len) * max; }
   let s = dx / max;
   if (Math.abs(s) < 0.12) s = 0; // a small dead zone makes "no spin" easy to hit
+  const before = spin;
   spin = Math.round(s * 20) / 20;
   spinY = dy / max;
+  if (e.type === 'pointerdown' || spin !== before) sfx('spin');
   drawPad();
 }
 pad.addEventListener('pointerdown', (e) => { pad.setPointerCapture(e.pointerId); setSpinFromPointer(e); });
@@ -181,12 +184,23 @@ pad.addEventListener('pointermove', (e) => { if (e.buttons) setSpinFromPointer(e
 pad.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     spin = Math.max(-1, Math.min(1, Math.round((spin + (e.key === 'ArrowLeft' ? -0.1 : 0.1)) * 20) / 20));
+    sfx('spin');
     drawPad();
     e.preventDefault();
   }
 });
 pad.tabIndex = 0;
-$('spin-reset').onclick = () => { spin = 0; spinY = 0; drawPad(); };
+$('spin-reset').onclick = () => { spin = 0; spinY = 0; drawPad(); sfx('spinReset'); };
+
+// ---------------- Sound ----------------
+mountSoundPanel($('sound'), $('sound-btn'));
+// Every button clicks, except the ones that have a sound of their own.
+const OWN_SOUND = new Set(['help-btn', 'spin-reset']);
+document.addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest('button');
+  if (!b || OWN_SOUND.has(b.id) || b.closest('#nights')) return;
+  sfx('click');
+});
 
 // Spin is an advanced control, hidden behind a small button until opened (remembered per browser).
 function setSpinOpen(open: boolean) {
@@ -229,7 +243,7 @@ function loadLevel(i: number, asReplay = false, kind: 'REPLAY' | 'SOLUTION' = 'R
     $('hint').classList.add('fade');
     showHowto(introText(level), currentTry(level.id) <= 1);
   } else {
-    closeIntro();
+    closeIntro(true);
     setHint(kind === 'SOLUTION' ? "Here's one way to serve everyone. Watch the power and spin." : 'Replaying your night: same numbers per pour, same result.');
   }
   void narrow;
@@ -279,7 +293,8 @@ function showHowto(text: string, withDemo: boolean) {
   $('ghost').hidden = true;
   requestAnimationFrame(placeTags);
 }
-function closeIntro() {
+function closeIntro(quiet = false) {
+  if (introOpen && !quiet) sfx('close');
   const wasDemo = !!demo;
   introOpen = false;
   wantDemo = false;
@@ -309,6 +324,7 @@ $('help-btn').onclick = () => {
   // The demo pour only before the first pour: closing it resets the renderer, which would
   // wipe this night's broken glass and walk-outs.
   showHowto(introText(sim.level), sim.shots.length === 0);
+  sfx('open');
 };
 
 const toScreen = (x: number, y: number) => {
@@ -497,7 +513,7 @@ function renderNights() {
     if (daily) b.classList.add('today');
     b.setAttribute('aria-label', daily ? `Tonight: night ${l.night}, ${l.title}` : `Practice night ${l.night}: ${l.title}`);
     if (i === levelIndex) b.setAttribute('aria-current', 'true');
-    b.onclick = () => loadLevel(i);
+    b.onclick = () => { sfx('night'); loadLevel(i); };
     nav.appendChild(b);
   });
 }
@@ -726,6 +742,7 @@ function cutIn(npc: string, mood: string, line: string) {
   $('cutin-name').textContent = NPCS[npc as keyof typeof NPCS]?.name ?? '';
   $('cutin-line').textContent = line;
   cutinEl.hidden = false;
+  sfx('cutin');
   cutinEl.classList.remove('in', 'out');
   void cutinEl.offsetWidth; // restart the slide-in
   cutinEl.classList.add('in');
@@ -759,6 +776,20 @@ function aimAtPointer(e: PointerEvent) {
   const dx = p.x - s.x, dy = p.y - s.y;
   if (Math.hypot(dx, dy) < 16) return;
   aimAngle = clampAngle(Math.atan2(dy, dx));
+  aimTick();
+}
+/** A soft tick for every few degrees the aim turns, like a ratchet. */
+let tickAngle = -Math.PI / 2;
+function aimTick() {
+  if (Math.abs(aimAngle - tickAngle) < (3 * Math.PI) / 180) return;
+  tickAngle = aimAngle;
+  sfx('aim');
+}
+/** The tap ratchets every tenth of a pull, higher the further down it goes. */
+let pullStep = 0;
+function pullTick() {
+  const step = Math.floor(charge * 10);
+  if (step !== pullStep) { if (step > 0) sfx('tapPull', charge); pullStep = step; }
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -802,18 +833,20 @@ tapEl.addEventListener('pointerdown', (e) => {
   tapEl.classList.add('grab');
   tipEl.hidden = true;
   charging = { by: 'tap', started: performance.now(), y0: e.clientY };
-  charge = 0;
+  charge = 0; pullStep = 0;
+  sfx('tapGrab');
   showPower(0, false);
   pullHint('Pull the tap down, then let go to pour');
 });
 tapEl.addEventListener('pointermove', (e) => {
   if (charging?.by !== 'tap') return;
   charge = Math.max(0, Math.min(1, (e.clientY - charging.y0) / slotH()));
+  pullTick();
   showPower(charge, false);
   pullHint(charge < TAP_MIN ? 'Let go here to cancel' : 'Let go to pour · push back up to cancel');
 });
 tapEl.addEventListener('pointerup', () => { if (charging?.by === 'tap') { $('hint').classList.add('fade'); shootCharged(TAP_MIN); } });
-tapEl.addEventListener('pointercancel', () => { if (charging?.by === 'tap') { cancelCharge(); $('hint').classList.add('fade'); } });
+tapEl.addEventListener('pointercancel', () => { if (charging?.by === 'tap') { cancelCharge(); sfx('tapCancel'); $('hint').classList.add('fade'); } });
 
 // ---------------- Keyboard: Q/E to aim, hold Space to pull the tap ----------------
 // Like 8 Ball Pool: turn the aim with Q and E (hold Shift for fine aim), then hold Space and
@@ -842,8 +875,9 @@ function shootCharged(min: number) {
   const power = charge;
   cancelCharge();
   // A quick Space tap (e.g. mashing to restart) or a tap pushed back up doesn't pour.
-  if (power < min || !canShoot()) return;
+  if (power < min || !canShoot()) { if (power > 0.01) sfx('tapCancel'); return; }
   if (sim.fire(aimAngle, power, spin)) {
+    sfx('pour', power);
     recorded = [...sim.shots];
     slowSteps = SLOW_STEPS;
     countTryIfFirstPour();
@@ -862,9 +896,9 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     // Didn't finish the night? Space starts it again straight away, even before the card shows.
     if (!e.repeat && mode === 'play' && (sim.status === 'failed' || sim.status === 'out')) { loadLevel(levelIndex); return; }
-    if (!e.repeat && canShoot() && !charging) charging = { by: 'space', started: performance.now(), y0: 0 };
+    if (!e.repeat && canShoot() && !charging) { charging = { by: 'space', started: performance.now(), y0: 0 }; pullStep = 0; sfx('tapGrab'); }
   }
-  if (e.key === 'Escape' && charging) cancelCharge();
+  if (e.key === 'Escape' && charging) { cancelCharge(); sfx('tapCancel'); }
 });
 window.addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
@@ -875,8 +909,8 @@ window.addEventListener('keyup', (e) => {
 
 /** Called every frame: turn the aim, slide the tap down while Space is held, and show the guideline. */
 function updatePoolControls(dt: number, now: number) {
-  if (turning) aimAngle = clampAngle(aimAngle + turning * TURN_SPEED * (fine ? 0.25 : 1) * (dt / 1000));
-  if (charging?.by === 'space') { charge = Math.min(1, (now - charging.started) / CHARGE_MS); showPower(charge, false); }
+  if (turning) { aimAngle = clampAngle(aimAngle + turning * TURN_SPEED * (fine ? 0.25 : 1) * (dt / 1000)); aimTick(); }
+  if (charging?.by === 'space') { charge = Math.min(1, (now - charging.started) / CHARGE_MS); pullTick(); showPower(charge, false); }
   // The guideline is always up while you can pour; the bartender's hand pulls back with the tap.
   if (!lesson) aim = canShoot() ? { angle: aimAngle, power: charging ? charge : 0 } : null;
 }
@@ -1018,6 +1052,15 @@ $('r-replay').onclick = () => {
 };
 
 // ---------------- Main loop: fixed 60 Hz simulation steps ----------------
+const EVENT_SFX: Partial<Record<SimEvent['t'], SfxId>> = {
+  contact: 'clink', bank: 'bank', thud: 'thud', tip: 'spill', smash: 'smash',
+  warn: 'warn', leave: 'leave', slam: 'slap', say: 'say',
+};
+function playEvent(ev: SimEvent) {
+  if (ev.t === 'served') sfx(ev.trick ? 'trick' : ev.quality === 3 ? 'perfect' : 'serve');
+  else if (ev.t === 'bonus') sfx(ev.kind === 'peanuts' ? 'peanuts' : 'cards');
+  else { const id = EVENT_SFX[ev.t]; if (id) sfx(id); }
+}
 function onStatusChange(prev: Status) {
   if (prev === 'rolling' && sim.status === 'aiming' && mode === 'play') {
     const lastResult = sim.pourResults[sim.pourResults.length - 1];
@@ -1030,6 +1073,7 @@ function onStatusChange(prev: Status) {
     else setHint(`Next up: ${who}.`);
   }
   if (sim.status === 'won' || sim.status === 'failed' || sim.status === 'out') {
+    if (mode === 'play') sfx(sim.status === 'won' ? 'win' : 'lose');
     if (sim.status === 'failed') renderer.setMood('sheriff', 'angry');
     if (mode === 'replay') setHint('Replay finished.');
     const winner = sim.status === 'won' && mode === 'play' && lastServed && !sim.left.has(lastServed) ? lastServed : null;
@@ -1124,6 +1168,7 @@ function frame(now: number) {
     let hud = false;
     for (const ev of sim.events) {
       renderer.handle(ev, sim);
+      if (!fast) playEvent(ev);
       // Big moments get a portrait cut-in; everything else stays in the small speech bubbles.
       if (ev.t === 'leave' && ev.npc === 'sheriff') cutIn('sheriff', 'angry', "MY HAT! That's it, I'm leaving!");
       if (ev.t === 'warn' && ev.npc === 'sheriff') { cutIn('sheriff', 'angry', 'Watch the hat, partner. Next time I walk.'); hud = true; }

@@ -18,6 +18,13 @@
     </div>
     <div class="top-right">
       <nav class="nights" aria-label="Nights" id="nights"></nav>
+      <button type="button" class="help-btn" id="sound-btn" aria-label="Sound and music" title="Sound and music" aria-controls="sound" aria-expanded="false">
+        <svg class="snd-icon" viewBox="0 0 17 16" shape-rendering="crispEdges" aria-hidden="true">
+          <rect x="1" y="5" width="4" height="6"/><rect x="5" y="3" width="2" height="10"/><rect x="7" y="1" width="2" height="14"/>
+          <g class="snd-waves"><rect x="11" y="5" width="2" height="6"/><rect x="14" y="2" width="2" height="12"/></g>
+          <g class="snd-x"><rect x="11" y="4" width="2" height="2"/><rect x="15" y="4" width="2" height="2"/><rect x="13" y="6" width="2" height="4"/><rect x="11" y="10" width="2" height="2"/><rect x="15" y="10" width="2" height="2"/></g>
+        </svg>
+      </button>
       <button type="button" class="help-btn" id="help-btn" aria-label="How to play" title="How to play">?</button>
     </div>
   </header>
@@ -105,6 +112,8 @@
     </div>
   </div>
 </main>
+<!-- Sound panel: music choice, volumes, and four versions of every sound effect (built in audio.ts). -->
+<div class="sound px-box" id="sound" role="dialog" aria-label="Sound and music" hidden></div>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
