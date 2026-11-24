@@ -6,7 +6,7 @@ import { NPCS } from './levels';
 import { BOWL_R, GLASS_R, POUR_R, PROP_R, type Sim, type SimEvent } from './sim';
 import {
   ACE, BOWL, BOWL_PAL, CARDS, GLASS, GLASS_BEER, GLASS_TIPPED, HAT, HAT_PAL, ITEM_PAL, NPC_PAL, NPC_SPRITES,
-  PALM, PETE_DROP, PETE_LEAN, PETE_SLIP, TAP, TAP_PAL, TIPJAR, glassPal, rotateCCW, rotateCW, type SpriteMap,
+  PETE_DROP, PETE_LEAN, PETE_SLIP, TAP, TAP_PAL, TIPJAR, glassPal, rotateCCW, rotateCW, type SpriteMap,
 } from './sprites';
 
 // Customers sit with their hands toward the counter: left-side sprites face right, right-side face left.
@@ -18,13 +18,16 @@ const PETE_POSES = {
   drop: { left: rotateCCW(PETE_DROP), right: rotateCW(PETE_DROP) },
 };
 const SHARD_DIRS: [number, number][] = [[-1, -0.4], [0.9, -0.6], [1, 0.5], [-0.7, 0.7], [0.2, -1]];
-const PALM_TO = { left: rotateCW(PALM), right: rotateCCW(PALM) }; // palm pointing toward the counter
 /** Customers are drawn at double pixel size, so they read clearly next to the bar. */
 const NPC_SCALE = 2;
 /** Mass of a drink glass in the physics (density 0.003, radius 9). */
 const DRINK_MASS = 0.003 * Math.PI * 81;
 /** How many art pixels a customer's centre sits from the rail. */
 const NPC_INSET = 15;
+/** Colours sampled from Pete's sprite (npc-pete-drop.png), for the arm that slides across the bar. */
+const PETE_ARM = { outline: '#3d3b3b', sleeve: '#5c5c5c', light: '#757474', shade: '#474747', skin: '#df9b72', skinLight: '#eea378', skinShade: '#c27754' };
+/** Column of Pete's slapping arm (the one that drops in npc-pete-drop.png) in his 32 px wide sprite. */
+const PETE_ARM_COL = 5.5;
 /** Where a hand-drawn customer's hands end: on the rail's outer part, sleeves well off it. */
 const HAND_EDGE_LEFT = 59;
 const HAND_EDGE_RIGHT = 137;
@@ -361,7 +364,9 @@ export class Renderer {
     if (sim.bowl) this.drawBowl(sim.bowl.position.x, sim.bowl.position.y);
     this.drawDebris();
     if (sim.arm && sim.armExtension > 0.03) this.drawArm(sim);
-    for (const n of L.npcs) this.drawNpc(n.id, n.side, n.y, n.id === L.arm?.owner ? sim.armExtension : 0);
+    for (const n of L.npcs) this.drawNpc(n.id, n.side, n.y, n.id === L.arm?.owner ? sim.armExtension : 0, n.id === L.arm?.owner);
+    const pete = L.npcs.find((n) => n.id === 'pete');
+    if (pete && this.peteDreams(L)) this.drawDream(pete.side, pete.y);
     const next = sim.nextOrder;
     if (sim.status === 'aiming' && sim.poursLeft > 0 && next >= 0) {
       const s = L.start;
@@ -401,7 +406,7 @@ export class Renderer {
     return { x: side === 'left' ? 56 - NPC_INSET : 140 + NPC_INSET, y: P(y) };
   }
 
-  private drawNpc(id: NpcId, side: 'left' | 'right', y: number, armExt: number) {
+  private drawNpc(id: NpcId, side: 'left' | 'right', y: number, armExt: number, hasArm = false) {
     const pos = this.npcPos(side, y);
     let x = pos.x;
     const py = pos.y;
@@ -430,7 +435,10 @@ export class Renderer {
       // Hands rest on the rail (56–62 left, 133–139 right) and stop short of the play area.
       const { width: w, height: h } = art.img;
       const handEdge = side === 'left' ? HAND_EDGE_LEFT - (w - art.pad) : HAND_EDGE_RIGHT - art.pad;
-      const x0 = handEdge + (x - pos.x) + bob, y0 = Math.round(py - h / 2);
+      // Pete's slapping arm sits off-centre in his sprite: when his arm is in play, line that arm
+      // up with the physics arm so the arm across the bar comes out of it.
+      const armShift = hasArm && id === 'pete' ? (side === 'right' ? h / 2 - PETE_ARM_COL : PETE_ARM_COL + 1 - h / 2) : 0;
+      const x0 = handEdge + (x - pos.x) + bob, y0 = Math.round(py - h / 2 + armShift);
       this.g.drawImage(art.shadow, x0 + 1, y0 + 1);
       this.g.drawImage(art.img, x0, y0);
       return;
@@ -548,11 +556,16 @@ export class Renderer {
 
   private drawPost(wx: number, wy: number, wr: number, kind: 'tap' | 'tipjar') {
     const x = P(wx), y = P(wy);
-    void wr;
+    // Something to avoid: the same pulsing double red ring as the sheriff's hat.
+    const pulse = Math.floor(this.frame / 12) % 2, rr = P(wr) + 3;
+    this.ring(x, y, rr + pulse, PAL.danger, 3, Math.floor(this.frame / 6));
+    this.ring(x, y, rr + 2 + pulse, '#7a2a1a', 3, Math.floor(this.frame / 6) + 3);
     const map = kind === 'tap' ? TAP : TIPJAR;
     const pal = kind === 'tap' ? TAP_PAL : ITEM_PAL;
     this.sprite(map, pal, x + 1, y + 1, PAL.shadow);
     this.sprite(map, pal, x, y);
+    // Something to avoid: the same small warning sign as the sheriff's hat.
+    this.drawWarning(x + 7, y - 11);
   }
 
   private drawGlass(wx: number, wy: number, drink: Drink) {
@@ -638,6 +651,37 @@ export class Renderer {
     }
   }
 
+  /** When there are peanuts on the bar, Pete sleeps and dreams of them until he gets them. */
+  private peteDreams(L: Sim['level']) {
+    return !!L.bowl && this.moods.get('pete') !== 'happy' && !this.leaving.has('pete');
+  }
+
+  /** A comic thought cloud over Pete's head with a peanut bowl in it, drifting gently. */
+  private drawDream(side: 'left' | 'right', wy: number) {
+    const { x, y } = this.npcPos(side, wy);
+    const g = this.g;
+    const bob = Math.round(Math.sin(this.frame / 40) * 1.5);
+    const cx = x - 4, cy = y - 38 + bob;
+    const puffs = [[-8, 2, 6], [0, -3, 8], [8, 0, 7], [-1, 4, 7], [11, 4, 4], [-11, 4, 4]];
+    const inCloud = (px: number, py: number) => puffs.some(([dx, dy, r]) => (px - dx) ** 2 + (py - dy) ** 2 <= r * r + r);
+    for (let py = -12; py <= 12; py++) {
+      for (let px = -16; px <= 16; px++) {
+        if (!inCloud(px, py)) continue;
+        const edge = !inCloud(px - 1, py) || !inCloud(px + 1, py) || !inCloud(px, py - 1) || !inCloud(px, py + 1);
+        g.fillStyle = edge ? PAL.ink : py > 6 ? '#d9cdb4' : '#f4ead3';
+        g.fillRect(cx + px, cy + py, 1, 1);
+      }
+    }
+    // Thought trail: two small puffs from his head up to the cloud.
+    const dot = (dx: number, dy: number, w: number) => {
+      g.fillStyle = PAL.ink; g.fillRect(x + dx - 1, y + dy - 1, w + 2, w + 2);
+      g.fillStyle = '#f4ead3'; g.fillRect(x + dx, y + dy, w, w);
+    };
+    dot(6, -17, 2);
+    dot(3, -23 + Math.round(bob / 2), 3);
+    this.sprite(BOWL, BOWL_PAL, cx, cy + 1);
+  }
+
   private drawBowl(wx: number, wy: number) {
     const x = P(wx), y = P(wy);
     this.sprite(BOWL, BOWL_PAL, x + 1, y + 1, PAL.shadow);
@@ -656,15 +700,19 @@ export class Renderer {
     let x0 = P(arm.position.x - w / 2), x1 = P(arm.position.x + w / 2);
     if (handAtLeft) x1 = Math.max(x0 + 4, shoulder); else x0 = Math.min(x1 - 4, shoulder);
     const y = P(arm.position.y);
-    const pal = NPC_PAL[npc.id];
-    this.rect(x0, y - 6, x1 - x0, 12, PAL.ink);
-    this.rect(x0, y - 4, x1 - x0, 8, pal.C);
-    this.rect(x0, y + 2, x1 - x0, 2, pal.c);
-    this.rect(x0, y - 4, x1 - x0, 2, '#ffffff1a');
-    const cuff = handAtLeft ? x0 : x1 - 4;
-    this.rect(cuff, y - 4, 4, 8, pal.W);
-    const palm = PALM_TO[npc.side];
-    this.sprite(palm, pal, handAtLeft ? x0 - 6 : x1 + 6, y, undefined, 2);
+    // Same sleeve and hand as the arm that drops in Pete's sprite: an 8 px grey sleeve, a skin-tone hand.
+    this.rect(x0, y - 4, x1 - x0, 8, PETE_ARM.outline);
+    this.rect(x0, y - 3, x1 - x0, 6, PETE_ARM.sleeve);
+    this.rect(x0, y - 3, x1 - x0, 1, PETE_ARM.light);
+    this.rect(x0, y + 1, x1 - x0, 2, PETE_ARM.shade);
+    const hx = handAtLeft ? x0 - 5 : x1;
+    this.rect(hx - 1, y - 4, 7, 8, PETE_ARM.outline);
+    this.rect(hx, y - 3, 5, 6, PETE_ARM.skin);
+    this.rect(hx + 1, y - 3, 3, 2, PETE_ARM.skinLight);
+    this.rect(hx, y + 2, 5, 1, PETE_ARM.skinShade);
+    const tip = handAtLeft ? hx : hx + 4;
+    this.rect(tip, y - 1, 1, 1, PETE_ARM.skinShade);
+    this.rect(tip, y + 1, 1, 1, PETE_ARM.skinShade);
   }
 
   // While you aim, only the bartender's hand shows, pulling straight back.
@@ -863,7 +911,7 @@ export class Renderer {
       if (this.leaving.has(n.id)) continue; // walked out: no name label
       const { x, y } = this.npcPos(n.side, n.y);
       this.text(NPCS[n.id].name, x, y + 19, n.id === 'pete' ? '#cdb894' : PAL.cream, 'center', 2.6);
-      if (n.id === 'pete' && this.moods.get('pete') !== 'happy') {
+      if (n.id === 'pete' && this.moods.get('pete') !== 'happy' && !this.peteDreams(L)) {
         const bob = Math.floor(this.frame / 20) % 2;
         this.text('z', x + 12, y - 15 - bob, PAL.cream, 'center', 2.2);
         this.text('Z', x + 16, y - 20 - bob, PAL.cream, 'center', 2.8);

@@ -34,11 +34,11 @@ export function todayKey(now = new Date()): string {
 
 interface Tier { orders: number; spare: number; spotR: number; timber: number; gaps: number; posts: number; puddles: number; standing: number; arm: number; }
 const TIERS: Tier[] = [
-  { orders: 2, spare: 2, spotR: 18, timber: 0, gaps: 0, posts: 0, puddles: 0, standing: 0, arm: 0 },
-  { orders: 3, spare: 2, spotR: 17, timber: 0.3, gaps: 0.5, posts: 1, puddles: 1, standing: 1, arm: 0 },
-  { orders: 3, spare: 2, spotR: 17, timber: 0.45, gaps: 1, posts: 1, puddles: 1, standing: 1, arm: 0.35 },
+  { orders: 2, spare: 2, spotR: 21, timber: 0, gaps: 0, posts: 0, puddles: 0, standing: 0, arm: 0 },
+  { orders: 3, spare: 2, spotR: 20, timber: 0.3, gaps: 0.5, posts: 1, puddles: 1, standing: 1, arm: 0 },
+  { orders: 3, spare: 2, spotR: 20, timber: 0.45, gaps: 1, posts: 1, puddles: 1, standing: 1, arm: 0.35 },
   // Hardest tier: four orders in a row; fewer obstacles, so the challenge is the sequence, not clutter.
-  { orders: 4, spare: 2, spotR: 17, timber: 0.5, gaps: 1, posts: 1, puddles: 1, standing: 1, arm: 0.4 },
+  { orders: 4, spare: 2, spotR: 20, timber: 0.5, gaps: 1, posts: 1, puddles: 1, standing: 1, arm: 0.4 },
 ];
 /** Monday..Sunday difficulty: easy Monday, hardest Saturday, Sunday a showpiece at Thursday level. */
 const WEEK: number[] = [0, 1, 1, 2, 2, 3, 2];

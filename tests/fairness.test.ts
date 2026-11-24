@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkOrder, successRate, AVERAGE, DEFAULT_RULES } from '../src/fairness';
 import { LEVELS } from '../src/levels';
+import { SERVE_REACH } from '../src/sim';
 import { SOLUTIONS } from '../src/solutions';
 
 const DEG = Math.PI / 180;
@@ -24,7 +25,7 @@ test('a pour found at the edge of what works is moved back to the middle', () =>
 });
 
 test('a target too small for a human hand is rejected', () => {
-  const tiny = { ...level, orders: level.orders.map((o, i) => (i === 0 ? { ...o, r: 5 } : o)) };
+  const tiny = { ...level, orders: level.orders.map((o, i) => (i === 0 ? { ...o, r: 5 - SERVE_REACH } : o)) };
   const c = checkOrder(tiny, [], shot, 0, DEFAULT_RULES);
   assert.equal(c.ok, false, `expected a rejection, got ${JSON.stringify({ angle: c.angle, power: c.power, success: c.success })}`);
 });

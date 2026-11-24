@@ -1,6 +1,6 @@
 import { LEVELS, NPCS, type Level, type NpcId } from './levels';
 import { Renderer, W, H, type Aim } from './render';
-import { Sim, STEP_MS, pointInPoly, type Shot, type SimEvent, type Status } from './sim';
+import { SERVE_REACH, Sim, STEP_MS, pointInPoly, type Shot, type SimEvent, type Status } from './sim';
 import { SOLUTIONS } from './solutions';
 import { fetchNight, requestedDate } from './daily';
 import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';
@@ -57,6 +57,8 @@ let slowSteps = 0;
 // On this device only for now; on Reddit it moves to the server, keyed by player and day.
 interface NightProgress { tries: number; help: boolean; solvedOnTry: number }
 const PROGRESS_KEY = 'last-orders-progress';
+// Local dev server: every reload starts from zero (first tries, demo pour, no help used), for testing.
+if (import.meta.env.DEV) try { localStorage.removeItem(PROGRESS_KEY); } catch { /* private mode */ }
 const today = new Date().toISOString().slice(0, 10);
 let progress: { date: string; nights: Record<string, NightProgress> } = { date: today, nights: {} };
 try {
@@ -220,7 +222,8 @@ function loadLevel(i: number, asReplay = false, kind: 'REPLAY' | 'SOLUTION' = 'R
   if (asReplay && kind === 'SOLUTION') savedSpin = spin;
   replayKind = kind;
   lesson = null;
-  if (document.getElementById('cutin')) { clearTimeout(cutinTimer); cutinEl.hidden = true; }
+  if (document.getElementById('cutin')) clearCutIns();
+  if (document.getElementById('joy')) { clearTimeout(joyTimer); joyEl.hidden = true; }
   peteSlapShown = false; lastServed = null;
   aimAngle = -Math.PI / 2; charging = null; charge = 0;
   if (document.getElementById('coach')) hideCoach();
@@ -448,24 +451,15 @@ function placeTags() {
   const tags: { x: number; y: number; text: string; tone: '' | 'danger' | 'good'; ring?: boolean }[] = [];
   const o = L.orders[0];
   if (o) tags.push({ x: o.x, y: o.y, text: 'Stop the drink in its circle', tone: 'good', ring: true });
-  const hat = L.props.find((p) => p.kind === 'hat');
-  if (hat) tags.push({ x: hat.x, y: hat.y, text: "Sheriff's hat: don't touch", tone: 'danger', ring: true });
-  // One "OK to hit" item: the one the demo pour aims at.
+  // Things to avoid get a warning sign on the object itself, and one shared "Avoid these" label.
+  const avoid = [...L.props.filter((p) => p.kind === 'hat'), ...L.posts];
+  if (avoid[0]) tags.push({ x: avoid[0].x, y: avoid[0].y - 22, text: 'Avoid these', tone: 'danger' });
+  // One "OK to hit" item: the one the demo pour aims at (no label on the peanuts: Pete's dream shows them).
   const target = demoTarget(L);
-  tags.push({ x: target.x, y: target.y, text: target.label, tone: '', ring: !target.label.startsWith('Gold') });
-  // The first gap in a side rail: drinks fall off there.
-  for (const side of ['left', 'right'] as const) {
-    const segs = L.rails.filter((r) => r.side === side).sort((a, b) => a.from - b.from);
-    let y = c.y, gap: number | null = null;
-    for (const r of segs) { if (r.from - y > 30) { gap = (y + r.from) / 2; break; } y = Math.max(y, r.to); }
-    if (gap === null && c.y + c.h - y > 30) gap = (y + c.y + c.h) / 2;
-    if (gap !== null) { tags.push({ x: side === 'left' ? c.x : c.x + c.w, y: gap, text: 'No rail: it falls off', tone: 'danger' }); break; }
-  }
-  // Then the night's special hazard, if any, and one rail type: at most five labels in all.
-  if (L.arm) tags.push({ x: c.x + c.w / 2, y: L.arm.y, text: "Pete's arm: time it", tone: 'danger' });
-  else if (L.posts[0]) tags.push({ x: L.posts[0].x, y: L.posts[0].y, text: L.posts[0].kind === 'tap' ? 'Beer tap: spills a drink' : 'Tip jar: spills a drink', tone: 'danger', ring: true });
+  // No label on the peanuts (Pete's dream shows them) or on the gold rail.
+  if (!target.label.startsWith('Peanuts') && !target.label.startsWith('Gold')) tags.push({ x: target.x, y: target.y, text: target.label, tone: '', ring: true });
+  // Then one rail type: at most five labels in all.
   const timber = L.rails.find((r) => (r.side === 'left' || r.side === 'right') && r.type === 'timber');
-  const brass = L.rails.find((r) => (r.side === 'left' || r.side === 'right') && r.type === 'brass');
   // A rail label goes at the point along its rail furthest from every other label.
   const railTag = (r: (typeof L.rails)[number], text: string) => {
     const x = r.side === 'left' ? c.x : c.x + c.w;
@@ -478,9 +472,9 @@ function placeTags() {
     tags.push({ x, y: best, text, tone: '' });
   };
   if (timber) railTag(timber, 'Dark rail: stops it dead');
-  else if (brass && !target.label.startsWith('Gold')) railTag(brass, 'Gold rail: bounces');
 
   const bw = box.clientWidth;
+  // Avoid items need no ring here: the bar draws a pulsing red ring and a warning sign on them all night.
   const placed: { x: number; y: number }[] = [];
   for (const t of tags.slice(0, 5)) {
     const p = toScreen(t.x, t.y);
@@ -521,11 +515,26 @@ function renderNights() {
   });
 }
 
-function pixelGlass(fill: string) {
-  // 9x11 pixel glass, drawn as rects so it stays crisp.
-  return `<svg width="18" height="22" viewBox="0 0 9 11" shape-rendering="crispEdges" aria-hidden="true">
-    <rect x="0" y="0" width="9" height="1" fill="#1a0f0a"/><rect x="0" y="0" width="1" height="11" fill="#1a0f0a"/><rect x="8" y="0" width="1" height="11" fill="#1a0f0a"/><rect x="0" y="10" width="9" height="1" fill="#1a0f0a"/>
-    <rect x="1" y="1" width="7" height="9" fill="#a9bcbc"/><rect x="2" y="3" width="5" height="6" fill="${fill}"/><rect x="2" y="2" width="1" height="1" fill="#ffffff"/></svg>`;
+type PourMark = 'miss' | 'served' | 'perfect' | 'bonus' | '';
+/** One pour in the HUD: a 9x11 pixel glass, stamped with what happened to it (drawn as rects so it stays crisp). */
+function pixelGlass(fill: string, mark: PourMark = '') {
+  const K = '#1a0f0a';
+  const r = (x: number, y: number, w: number, h: number, c: string) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}"/>`;
+  let s = r(0, 1, 9, 1, K) + r(0, 1, 1, 11, K) + r(8, 1, 1, 11, K) + r(0, 11, 9, 1, K) + r(1, 2, 7, 9, '#a9bcbc') + r(2, 4, 5, 6, fill) + r(2, 3, 1, 1, '#ffffff');
+  if (mark === 'miss') {
+    // A big red X over the glass, with a dark outline.
+    for (let i = 0; i < 7; i++) s += r(i, 2 + i, 2, 2, K) + r(6 - i, 2 + i, 2, 2, K);
+    for (let i = 0; i < 7; i++) s += r(i, 2 + i, 2, 1, '#e8664a') + r(6 - i, 2 + i, 2, 1, '#e8664a');
+  } else if (mark === 'served' || mark === 'perfect') {
+    // A tick; a perfect pour gets a brighter tick and a white sparkle.
+    const steps = [[0, 3], [1, 4], [2, 5], [3, 4], [4, 3], [5, 2], [6, 1]];
+    const y0 = mark === 'perfect' ? 4 : 3;
+    s += steps.map(([x, y]) => r(x, y + y0, 2, 2, K)).join('') + steps.map(([x, y]) => r(x + 1, y + y0, 1, 1, mark === 'perfect' ? '#f2c14a' : '#d9a441')).join('');
+    if (mark === 'perfect') s += r(6, 1, 1, 3, '#ffffff') + r(5, 2, 3, 1, '#ffffff') + r(1, 1, 1, 1, '#ffffff') + r(8, 6, 1, 1, '#ffffff');
+  } else if (mark === 'bonus') {
+    s += r(3, 2, 3, 9, K) + r(0, 5, 9, 3, K) + r(4, 3, 1, 7, '#6dbb4a') + r(1, 6, 7, 1, '#6dbb4a');
+  }
+  return `<svg width="20" height="26" viewBox="0 0 10 13" shape-rendering="crispEdges" aria-hidden="true">${s}</svg>`;
 }
 
 function updateHud() {
@@ -556,13 +565,18 @@ function updateHud() {
 
   const pours = $('bottles');
   pours.innerHTML = '';
-  const nextDrink = next >= 0 ? sim.orders[next].drink : 'water';
+  // Pours left are all the same full glass; used ones get a stamp: red X miss/spill, gold tick
+  // served, star perfect, green plus bonus.
   for (let i = 0; i < level.pours; i++) {
     const result = sim.pourResults[i];
-    const fill = result ? (result === 'served' || result === 'perfect' || result === 'trick' ? '#d9a441' : result === 'peanuts' || result === 'cards' ? '#6dbb4a' : '#7a3a2a') : i === sim.shots.length ? DRINK_COLOR[nextDrink] : '#3a2a20';
-    pours.insertAdjacentHTML('beforeend', pixelGlass(fill));
+    const mark: PourMark = !result ? '' : result === 'perfect' ? 'perfect' : result === 'served' || result === 'trick' ? 'served' : result === 'peanuts' || result === 'cards' ? 'bonus' : 'miss';
+    const fill = !result ? '#f2b53a' : '#3a2a20'; // used glasses are emptied, so the stamp stands out
+    pours.insertAdjacentHTML('beforeend', pixelGlass(fill, mark));
   }
   pours.setAttribute('aria-label', `${sim.poursLeft} of ${level.pours} pours left`);
+  // The count, in words: the glasses alone (gold served, red missed, coloured = next, dark = unused) were unclear.
+  $('pours-left').textContent = `${sim.poursLeft} left`;
+  $('pours-left').classList.toggle('last', sim.poursLeft === 1);
   $('tips').textContent = `${sim.tips}c`;
   $('help-tag').hidden = !helpUsed.has(level.id);
   $('try-tag').textContent = `TRY ${currentTry(level.id)}`;
@@ -734,31 +748,76 @@ const SLY_LINES: Record<string, string> = {
   lavinia: "Darling, you'd clean up at poker.",
   pete: '...zzz... same again... zzz',
 };
+// Two cut-in slots: the usual one, and a second one just below it for when the night ends
+// with two reactions at once (the last customer served, then the one still waiting).
 const cutinEl = $('cutin');
-let cutinTimer = 0;
-function cutIn(npc: string, mood: string, line: string) {
+const cutinLow = cutinEl.cloneNode(true) as HTMLElement;
+cutinLow.id = 'cutin-low';
+cutinLow.classList.add('lower');
+cutinLow.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+cutinEl.after(cutinLow);
+const cutinTimers = new Map<HTMLElement, number>();
+function cutIn(npc: string, mood: string, line: string, el: HTMLElement = cutinEl, ms = 2200) {
   const src = PORTRAITS[`${npc}-${mood}`] ?? PORTRAITS[`${npc}-any`];
   if (!src) return;
-  cutinEl.classList.remove(...Object.values(CUTIN_MOOD));
-  cutinEl.classList.add(CUTIN_MOOD[mood] ?? 'mood-angry');
-  ($('cutin-img') as HTMLImageElement).src = src;
-  $('cutin-name').textContent = NPCS[npc as keyof typeof NPCS]?.name ?? '';
-  $('cutin-line').textContent = line;
-  cutinEl.hidden = false;
+  el.classList.remove(...Object.values(CUTIN_MOOD));
+  el.classList.add(CUTIN_MOOD[mood] ?? 'mood-angry');
+  // The portrait stands on the side of the bar where the customer sits, facing the bar.
+  el.classList.toggle('right', sim.level.npcs.find((n) => n.id === npc)?.side === 'right');
+  el.querySelector('img')!.src = src;
+  el.querySelector('.cutin-bubble span')!.textContent = NPCS[npc as keyof typeof NPCS]?.name ?? '';
+  el.querySelector('.cutin-bubble strong')!.textContent = line;
+  el.hidden = false;
   sfx('cutin');
-  cutinEl.classList.remove('in', 'out');
-  void cutinEl.offsetWidth; // restart the slide-in
-  cutinEl.classList.add('in');
-  clearTimeout(cutinTimer);
-  cutinTimer = window.setTimeout(hideCutIn, 2200);
+  el.classList.remove('in', 'out');
+  void el.offsetWidth; // restart the slide-in
+  el.classList.add('in');
+  clearTimeout(cutinTimers.get(el));
+  cutinTimers.set(el, window.setTimeout(() => hideCutIn(el), ms));
 }
-function hideCutIn() {
-  if (cutinEl.hidden) return;
-  cutinEl.classList.add('out');
-  clearTimeout(cutinTimer);
-  cutinTimer = window.setTimeout(() => { cutinEl.hidden = true; }, 260);
+function hideCutIn(el: HTMLElement = cutinEl) {
+  if (el.hidden) return;
+  el.classList.add('out');
+  clearTimeout(cutinTimers.get(el));
+  cutinTimers.set(el, window.setTimeout(() => { el.hidden = true; }, 260));
 }
-cutinEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); hideCutIn(); });
+function clearCutIns() {
+  for (const el of [cutinEl, cutinLow]) { clearTimeout(cutinTimers.get(el)); el.hidden = true; }
+}
+/** A customer's reaction portrait (happy, angry, surprised), no text, in the floor space on their side of the bar. */
+const joyEl = $('joy') as HTMLImageElement;
+let joyTimer = 0;
+function reactPop(owner: NpcId, mood: 'happy' | 'angry' | 'surprised') {
+  const src = PORTRAITS[`${owner}-${mood}`] ?? PORTRAITS[`${owner}-any`];
+  const npc = sim.level.npcs.find((n) => n.id === owner);
+  if (!src || !npc) return;
+  const c = sim.level.counter, bw = board.clientWidth, bh = board.clientHeight;
+  const barL = toScreen(c.x, 0).x, barR = toScreen(c.x + c.w, 0).x;
+  const left = npc.side === 'left';
+  const room = left ? barL : bw - barR; // floor between the board edge and the bar
+  const w = Math.max(44, Math.min(150, room - 14));
+  joyEl.src = src;
+  // Portraits face right; customers on the right of the bar get a mirrored one, facing the bar.
+  joyEl.style.setProperty('--flip', left ? '1' : '-1');
+  joyEl.style.width = `${w}px`;
+  joyEl.style.left = `${left ? Math.max(2, barL - 10 - w) : Math.min(bw - w - 2, barR + 10)}px`;
+  joyEl.style.top = `${Math.max(w * 0.6, Math.min(bh - w * 0.6, toScreen(0, npc.y).y))}px`;
+  joyEl.hidden = false;
+  joyEl.classList.remove('in', 'out');
+  void joyEl.offsetWidth; // restart the pop
+  joyEl.classList.add('in');
+  holdReact(1500);
+}
+function hideReact() { clearTimeout(joyTimer); joyEl.hidden = true; }
+/** Keeps the current reaction portrait up for `ms` more, then fades it. */
+function holdReact(ms: number) {
+  clearTimeout(joyTimer);
+  joyTimer = window.setTimeout(() => {
+    joyEl.classList.add('out');
+    joyTimer = window.setTimeout(() => { joyEl.hidden = true; }, 200);
+  }, ms);
+}
+for (const el of [cutinEl, cutinLow]) el.addEventListener('pointerdown', (e) => { e.stopPropagation(); hideCutIn(el); });
 
 // ---------------- Input: touch the bar to aim, pull the beer tap to pour ----------------
 // Playtesters found one drag doing both jobs (angle = aim, length = strength) too sensitive:
@@ -925,14 +984,15 @@ function nearMiss(): string | null {
   if (!g?.body || !o || o.served) return null;
   const { x, y } = g.body.position;
   const d = Math.hypot(x - o.x, y - o.y);
-  if (d <= o.r || d > o.r + 14) return null;
+  const reach = o.r + SERVE_REACH;
+  if (d <= reach || d > reach + 14) return null;
   // Compare with the line from the start to the circle: along it is short/long, across it is wide.
   const s = sim.level.start;
   const len = Math.hypot(o.x - s.x, o.y - s.y) || 1;
   const ux = (o.x - s.x) / len, uy = (o.y - s.y) / len;
   const along = (x - o.x) * ux + (y - o.y) * uy;
   const across = (x - o.x) * -uy + (y - o.y) * ux;
-  const by = d - o.r < 5 ? 'a hair' : 'a glass-width';
+  const by = d - reach < 5 ? 'a hair' : 'a glass-width';
   if (Math.abs(along) >= Math.abs(across)) return along < 0 ? `Just short, by ${by}.` : `Just long, by ${by}.`;
   return across > 0 ? `Just wide to the right.` : `Just wide to the left.`;
 }
@@ -1042,6 +1102,8 @@ $('r-post').onclick = async () => {
   btn.disabled = ok;
 };
 $('r-retry').onclick = () => loadLevel(levelIndex);
+// Start the night over at any point, not only from the results card.
+$('retry-btn').onclick = () => loadLevel(levelIndex);
 $('r-help').onclick = () => {
   const id = NIGHTS[levelIndex].id;
   markHelpUsed(id);
@@ -1070,6 +1132,9 @@ function onStatusChange(prev: Status) {
     const next = sim.orders[sim.nextOrder];
     const who = next ? `${NPCS[next.owner].short}'s ${next.drink}` : '';
     const close = lastResult === 'miss' ? nearMiss() : null;
+    const pourGlass = [...sim.glasses].reverse().find((g) => g.id.startsWith('pour-'));
+    const missed = pourGlass ? sim.orders[pourGlass.order] : undefined;
+    if (lastResult === 'miss' && missed && !missed.served) reactPop(missed.owner, 'angry');
     if (close) setHint(`So close! ${close} That glass stays on the bar now. Try ${who} again.`);
     else if (lastResult === 'miss') setHint(`Missed the spot. That glass stays on the bar now. Try ${who} again.`);
     else if (lastResult === 'spill' || lastResult === 'smash') setHint(`Spilled. Watch out for the puddle. Pour ${who} again.`);
@@ -1083,8 +1148,19 @@ function onStatusChange(prev: Status) {
     if (winner) cutIn(winner, 'sly', SLY_LINES[winner] ?? 'Not bad, kid.');
     // Out of bottles with someone still waiting: the customer you couldn't serve gets the last word.
     const waiting = sim.status === 'out' && mode === 'play' ? sim.orders.find(o => !o.served && !o.cancelled && !sim.left.has(o.owner)) : undefined;
-    if (waiting) cutIn(waiting.owner, 'angry', DRY_LINES[waiting.owner] ?? 'Still waitin\' on my drink!');
-    resultTimer = window.setTimeout(showResult, winner || waiting ? 2000 : 1200);
+    // If the last pour still served someone: their happy cut-in first, then the angry one of
+    // the customer still waiting slides in just below it, and both stay up together.
+    const last = sim.pourResults[sim.pourResults.length - 1];
+    const happy = waiting && lastServed && (last === 'served' || last === 'perfect' || last === 'trick') ? lastServed : null;
+    const angryAt = happy ? 900 : 0;
+    if (happy) { hideReact(); cutIn(happy, 'happy', NPCS[happy].lines.served, cutinEl, angryAt + 2600); }
+    if (waiting) {
+      const w = waiting;
+      const angry = () => cutIn(w.owner, 'angry', DRY_LINES[w.owner] ?? 'Still waitin\' on my drink!', happy ? cutinLow : cutinEl, 2600);
+      if (angryAt) window.setTimeout(() => { if (sim.status === 'out') angry(); }, angryAt);
+      else angry();
+    }
+    resultTimer = window.setTimeout(showResult, angryAt + (winner || waiting ? 2000 : 1200));
   }
 }
 
@@ -1172,16 +1248,15 @@ function frame(now: number) {
     for (const ev of sim.events) {
       renderer.handle(ev, sim);
       if (!fast) playEvent(ev);
-      // Big moments get a portrait cut-in; everything else stays in the small speech bubbles.
-      if (ev.t === 'leave' && ev.npc === 'sheriff') cutIn('sheriff', 'angry', "MY HAT! That's it, I'm leaving!");
-      if (ev.t === 'warn' && ev.npc === 'sheriff') { cutIn('sheriff', 'angry', 'Watch the hat, partner. Next time I walk.'); hud = true; }
-      if (ev.t === 'served' && ev.trick) cutIn(ev.owner, 'surprised', "Well, I'll be! A trick shot!");
-      else if (ev.t === 'served' && ev.quality === 3) cutIn(ev.owner, 'happy', NPCS[ev.owner].lines.perfect);
-      if (ev.t === 'bonus' && ev.kind === 'cards') cutIn('lavinia', 'surprised', 'That ace was there when I sat down!');
-      if (ev.t === 'bonus' && ev.kind === 'peanuts') cutIn('pete', 'happy', '...peanuts? Bless you, kid.');
-      if (ev.t === 'slam' && !peteSlapShown && mode === 'play') { peteSlapShown = true; cutIn('pete', 'angry', '*SLAP* ...wha? Who moved the bar?'); }
-      // A customer's own drink knocked over (not the sheriff walking out, which has its own cut-in).
-      if ((ev.t === 'tip' || ev.t === 'smash') && ev.owner && !sim.left.has(ev.owner) && mode === 'play') cutIn(ev.owner, 'angry', ev.t === 'tip' ? 'Hey! That was MY drink!' : 'On the floor?! That was MY drink!');
+      // During the night every reaction is a portrait beside the bar, no text; the full cut-in
+      // with a line is kept for the end of the night.
+      if ((ev.t === 'leave' || ev.t === 'warn') && ev.npc === 'sheriff') reactPop('sheriff', 'angry');
+      if (ev.t === 'warn' && ev.npc === 'sheriff') hud = true;
+      if (ev.t === 'served') reactPop(ev.owner, ev.trick ? 'surprised' : 'happy');
+      if (ev.t === 'bonus') reactPop(ev.kind === 'cards' ? 'lavinia' : 'pete', ev.kind === 'cards' ? 'surprised' : 'happy');
+      if (ev.t === 'slam' && !peteSlapShown && mode === 'play') { peteSlapShown = true; reactPop('pete', 'angry'); }
+      // A customer's own drink knocked over (not the sheriff walking out, which has its own reaction).
+      if ((ev.t === 'tip' || ev.t === 'smash') && ev.owner && !sim.left.has(ev.owner) && mode === 'play') reactPop(ev.owner, 'angry');
       if (ev.t === 'served') { lastServed = ev.owner; if (mode === 'play' && isDaily()) journey.served(sim.servedCount, sim.level.orders.length); }
       if (ev.t === 'tip' || ev.t === 'bonus' || ev.t === 'smash' || ev.t === 'served') hud = true;
     }

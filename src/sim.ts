@@ -8,6 +8,8 @@ const { Engine, Bodies, Body, Composite, Events } = Matter;
 
 export const POUR_R = 9; // a drink sliding down the bar
 export const GLASS_R = 8; // a drink standing on the bar
+/** A drink counts as served when any part of the glass touches its ring, not just its centre. */
+export const SERVE_REACH = POUR_R;
 export const BOWL_R = 13;
 export const PROP_R = { hat: 13, cards: 11 } as const;
 export const MAX_SPEED = 12.5;
@@ -562,7 +564,7 @@ export class Sim {
     for (const g of this.glasses) {
       if (g.role !== 'served' || !g.body) continue;
       const o = this.orders[g.order];
-      if (Math.hypot(g.body.position.x - o.x, g.body.position.y - o.y) > o.r + 1) {
+      if (Math.hypot(g.body.position.x - o.x, g.body.position.y - o.y) > o.r + SERVE_REACH + 1) {
         o.served = false; o.tip = 0; o.quality = 0; g.role = 'stray';
         this.say(o.owner, 'Hey! I had that!');
       }
@@ -577,11 +579,11 @@ export class Sim {
       for (const g of this.glasses) {
         if (g.order !== i || g.role !== 'stray' || !g.body) continue;
         const d = Math.hypot(g.body.position.x - o.x, g.body.position.y - o.y);
-        if (d <= o.r && d < bestD) { best = g; bestD = d; }
+        if (d <= o.r + SERVE_REACH && d < bestD) { best = g; bestD = d; }
       }
       if (!best) continue;
       const trick = best !== pour;
-      const quality = bestD < 4 ? 3 : bestD < 9 ? 2 : 1;
+      const quality = bestD < 6 ? 3 : bestD < 12 ? 2 : 1;
       o.served = true;
       o.quality = quality;
       o.tip = [0, 10, 25, 50][quality] + (this.shotBanked ? 15 : 0) + (trick ? 25 : 0);
@@ -589,7 +591,8 @@ export class Sim {
       if (quality === 3) this.badges.add('Perfect pour');
       if (this.shotBanked) this.badges.add('Bank pour');
       if (trick) { this.badges.add('Trick shot'); trickThisPour = true; }
-      this.say(o.owner, trick ? 'Well, I\'ll be!' : quality === 3 ? NPCS[o.owner].lines.perfect : NPCS[o.owner].lines.served);
+      // A plain serve shows the customer's happy portrait instead of a speech bubble (main.ts).
+      if (trick) this.say(o.owner, 'Well, I\'ll be!');
       this.events.push({ t: 'served', x: o.x, y: o.y, quality, tip: o.tip, owner: o.owner, trick });
     }
     // Peanuts first, so a pour that only pushes the bowl into Pete's spot counts as a bonus
@@ -610,8 +613,7 @@ export class Sim {
       else if (this.bonusThisPour) this.pourResults.push(this.bonusThisPour);
       else {
         this.pourResults.push('miss');
-        const o = this.orders[pour.order];
-        if (!o.served) this.say(o.owner, NPCS[o.owner].lines.miss ?? 'Closer!');
+        // No bubble: the customer's angry portrait shows instead (main.ts).
       }
     }
     this.bonusThisPour = '';
