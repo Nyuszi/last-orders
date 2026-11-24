@@ -392,7 +392,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
    Sizes are sprite pixels times --s: 1.5 on phones (3 device px per sprite px on a 2x screen),
    2 on desktop (square pixels on a 1x monitor). main.ts reads --s to place the knob. */
 .tap {
-  --s: 1.5; --slot-h: 300px;
+  --s: 1.5;
   position: relative; flex: 0 0 auto; width: calc(44px * var(--s)); overflow: hidden;
   background: var(--panel); border: var(--px) solid var(--ink); touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none;
 }
@@ -407,22 +407,28 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   position: absolute; left: 50%; transform: translateX(-50%); top: calc(38px * var(--s)); bottom: calc(34px * var(--s)); width: calc(16px * var(--s));
   background-repeat: repeat-y; background-size: calc(16px * var(--s)) calc(4px * var(--s)); image-rendering: pixelated; z-index: 1;
 }
+/* The slot lines up with the dark window drawn in the tower head (from row 28) and ends at row 3
+   of the drip tray, so a little brass shows above the tray's arch and spout, as drawn. */
+.tap { --slot-x: 50%; }
 /* The slot is the strength scale: five stepped bands (nudge, soft, medium, firm, hard), dim until the beer fills them. */
 .tap .t-slot {
-  position: absolute; left: 50%; transform: translateX(-50%); top: calc(30px * var(--s)); bottom: calc(26.7px * var(--s)); width: calc(8px * var(--s));
+  position: absolute; left: var(--slot-x); transform: translateX(-50%); top: calc(28px * var(--s)); bottom: calc(34px * var(--s)); width: calc(8px * var(--s));
   border: 2px solid var(--ink); z-index: 3;
   background: linear-gradient(#2c4420 0 25%, #46491f 25% 45%, #5a4318 45% 65%, #553117 65% 85%, #55251b 85%);
 }
+/* The beer always fills the whole slot and is uncovered from the top as you pull (main.ts sets
+   the clip). Growing its height instead left a stale, unpainted band between the old level and
+   the knob in Chrome. */
 .tap .t-beer {
-  position: absolute; left: 50%; transform: translateX(-50%); top: calc(30px * var(--s) + 2px); width: calc(8px * var(--s) - 4px); height: 0; z-index: 3;
-  border-bottom: 0 solid var(--cream);
-  background: linear-gradient(#6dbb4a 0 25%, #b5c94a 25% 45%, #f2b53a 45% 65%, #e88a3a 65% 85%, #e8664a 85%) 0 0 / 100% var(--slot-h) no-repeat;
+  position: absolute; left: var(--slot-x); transform: translateX(-50%); top: calc(28px * var(--s) + 2px); bottom: calc(34px * var(--s) + 2px); width: calc(8px * var(--s) - 4px); z-index: 3;
+  background: linear-gradient(#6dbb4a 0 25%, #b5c94a 25% 45%, #f2b53a 45% 65%, #e88a3a 65% 85%, #e8664a 85%);
+  clip-path: inset(0 0 100% 0);
 }
 /* Where the last pour was pulled to, so a second try can go a touch harder or softer. */
-.tap .t-last { position: absolute; left: 50%; transform: translateX(-50%); width: calc(8px * var(--s) + 4px); height: 2px; background: var(--cream); opacity: 0.75; z-index: 3; }
+.tap .t-last { position: absolute; left: var(--slot-x); transform: translateX(-50%); width: calc(8px * var(--s) + 4px); height: 2px; background: var(--cream); opacity: 0.75; z-index: 3; }
 .tap .t-last[hidden] { display: none; }
 .tap .t-ticks {
-  position: absolute; right: 2px; top: calc(30px * var(--s) + 2px); bottom: calc(28px * var(--s)); z-index: 3; pointer-events: none;
+  position: absolute; right: 2px; top: calc(28px * var(--s) + 2px); bottom: calc(35px * var(--s)); z-index: 3; pointer-events: none;
   display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end;
   font-family: var(--head); font-size: calc(5px * var(--s)); line-height: 1; color: var(--muted);
 }

@@ -98,18 +98,18 @@ tapKnob.src = tapSprite('tap-knob');
 $('tap-column').style.backgroundImage = `url(${tapSprite('tap-mid')})`;
 const tapScale = () => parseFloat(getComputedStyle(tapEl).getPropertyValue('--s')) || 1.5;
 /** Top of the beer inside the slot, and the slot's inner height, in CSS px. Match style.css. */
-const slotTop = () => 30 * tapScale() + 2;
-const slotH = () => Math.max(40, tapEl.clientHeight - 56.7 * tapScale() - 4);
+const slotTop = () => 28 * tapScale() + 2;
+const slotH = () => Math.max(40, tapEl.clientHeight - 62 * tapScale() - 4);
 
-/** Shows a strength on the tap: the knob's pin and the beer level sit at the same height. */
+/** Shows a strength on the tap: the knob's pin rides just above the beer level. */
 function showPower(power: number, resting: boolean) {
   const p = resting ? 0 : Math.max(0, Math.min(1, power));
   const h = slotH();
-  tapEl.style.setProperty('--slot-h', `${h}px`);
   tapKnob.classList.toggle('back', resting);
-  tapKnob.style.top = `${slotTop() - 5.5 * tapScale() + p * h}px`;
-  tapBeer.style.height = `${p * h}px`;
-  tapBeer.style.borderBottomWidth = p > 0.01 ? '3px' : '0';
+  // The pin's lower edge is 7 sprite px down the knob sprite. Resting it there keeps the pin off
+  // the colours still to come (at 0% it sits on the tower head, so the whole scale shows).
+  tapKnob.style.top = `${slotTop() - 7 * tapScale() + p * h}px`;
+  tapBeer.style.clipPath = `inset(0 0 ${h - p * h}px 0)`;
   tapEl.setAttribute('aria-valuenow', String(Math.round(p * 100)));
   // After a pour, a cream line marks how far that pour was pulled.
   if (resting && power > 0) { tapLast.style.top = `${slotTop() + power * h - 1}px`; tapLast.hidden = false; }
