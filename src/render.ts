@@ -164,6 +164,9 @@ export class Renderer {
     img.src = url;
   }
 
+  /** Customers playing a reaction animation: what kind, and the frame it started. */
+  private anims = new Map<NpcId, { kind: 'drink' | 'peanuts'; start: number }>();
+
   /** Pete's pose tracking: last arm extension, whether the arm is on its way back, last pose, a pending head slam. */
   private peteArmLast = 0;
   private peteArmBack = false;
@@ -227,6 +230,41 @@ export class Renderer {
     this.debris = [];
     this.shake = 0;
     this.leaving.clear();
+    this.anims.clear();
+  }
+
+  /**
+   * Who is drinking or eating right now, from the game state: a customer keeps drinking while
+   * one of their orders is served (until a later pour knocks the glass out of their circle), and
+   * Pete keeps eating while the peanut bowl sits in his spot.
+   */
+  private syncAnims(sim: Sim) {
+    const L = sim.level;
+    for (const n of L.npcs) {
+      let kind: 'drink' | 'peanuts' | null = null;
+      if (n.id === 'pete' && L.bonus && sim.bowl && sim.badges.has('Peanuts for Pete')
+        && Math.hypot(sim.bowl.position.x - L.bonus.x, sim.bowl.position.y - L.bonus.y) < L.bonus.r) kind = 'peanuts';
+      else if (sim.orders.some((o) => o.owner === n.id && o.served)) kind = 'drink';
+      const a = this.anims.get(n.id);
+      if (!kind) this.anims.delete(n.id);
+      else if (a?.kind !== kind) this.anims.set(n.id, { kind, start: this.frame });
+    }
+  }
+
+  /**
+   * The animation frame image key for a customer, or null when none is playing (or its frames
+   * are missing). Drinking: lift once, then drink and enjoy it in turn. Pete's peanuts: grab
+   * once, then crack and munch in turn.
+   */
+  private animFrame(id: NpcId): string | null {
+    const a = this.anims.get(id);
+    if (!a) return null;
+    const t = this.frame - a.start;
+    const n = a.kind === 'drink'
+      ? (t < 20 ? 1 : (t - 20) % 90 < 50 ? 2 : 3)
+      : (t < 30 ? 1 : Math.floor((t - 30) / 18) % 2 ? 3 : 2);
+    const key = `anim-${id}-${a.kind}-${n}`;
+    return this.npcImgs.has(key) ? key : null;
   }
 
   setMood(npc: NpcId, mood: 'angry' | 'happy') {
@@ -398,6 +436,7 @@ export class Renderer {
     if (sim.bowl) this.drawBowl(sim.bowl.position.x, sim.bowl.position.y);
     this.drawDebris();
     if (sim.arm && sim.armExtension > 0.03) this.drawArm(sim);
+    this.syncAnims(sim);
     for (const n of L.npcs) this.drawNpc(n.id, n.side, n.y, n.id === L.arm?.owner ? sim.armExtension : 0, n.id === L.arm?.owner);
     const pete = L.npcs.find((n) => n.id === 'pete');
     if (pete && this.peteDreams(L)) this.drawDream(pete.side, pete.y);
@@ -469,6 +508,13 @@ export class Renderer {
       if (pose === 'lean' && Math.floor(this.frame / 40) % 2) bob = side === 'left' ? -1 : 1;
       const allPoses = (['lean', 'slip', 'drop'] as const).every((p) => this.npcImgs.has(`pete-${p}`));
       artKey = allPoses ? `pete-${pose}` : '';
+    }
+    // A drink (or Pete's peanuts) just arrived: play that customer's 3-frame animation instead.
+    const animKey = this.animFrame(id);
+    if (animKey) {
+      artKey = animKey;
+      bob = 0;
+      if (id === 'pete') { this.petePose = 'drop'; this.peteSlam = null; }
     }
     const art = this.npcImgs.get(artKey)?.[side];
     if (art) {

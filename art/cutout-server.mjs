@@ -53,6 +53,22 @@ http.createServer((req, res) => {
     });
     return;
   }
+  // Game sprites baked in a browser page (e.g. art/sprite-preview.html on the vite server):
+  // POST the PNG as base64 text to /save-sprite?name=anim-dutch-drink-1 -> src/assets/sprites/<name>.png
+  if (req.method === 'POST' && url.pathname === '/save-sprite') {
+    const name = url.searchParams.get('name') ?? '';
+    if (!/^(npc|anim|pete)-[a-z0-9-]+$/.test(name)) return send(res, 400, 'text/plain', 'bad name');
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      const dst = path.join(ART, '..', 'src', 'assets', 'sprites', `${name}.png`);
+      fs.writeFileSync(dst, Buffer.from(Buffer.concat(chunks).toString('ascii'), 'base64'));
+      console.log('saved', path.relative(path.join(ART, '..'), dst));
+      res.writeHead(200, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
+      res.end('ok');
+    });
+    return;
+  }
   if (req.method === 'POST' && url.pathname === '/save') {
     const name = url.searchParams.get('name') ?? '', kind = url.searchParams.get('kind');
     if (!safe(name) || !['webp', 'preview'].includes(kind)) return send(res, 400, 'text/plain', 'bad name');
