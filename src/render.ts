@@ -796,8 +796,12 @@ export class Renderer {
         }
       } else {
         if (!p.touched) this.ring(x, y, P(PROP_R.cards) + 3, PAL.cream, 1);
-        this.sprite(CARDS, ITEM_PAL, x + 1, y + 1, PAL.shadow);
-        this.sprite(CARDS, ITEM_PAL, x, y);
+        const cards = this.itemImgs.get('cards');
+        if (cards) this.drawItem(cards, x, y);
+        else {
+          this.sprite(CARDS, ITEM_PAL, x + 1, y + 1, PAL.shadow);
+          this.sprite(CARDS, ITEM_PAL, x, y);
+        }
         // Knocked: the hidden ace slides out from under the deck.
         if (p.touched) {
           const ace = this.itemImgs.get('ace');
