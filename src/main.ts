@@ -18,6 +18,9 @@ const renderer = new Renderer(canvas);
 // Hand-drawn customer sprites ("npc-<id>.png", 32×28 facing down; Pete: "npc-pete-<lean|slip|drop>.png") replace the built-in maps.
 const NPC_FILES = import.meta.glob<string>('./assets/sprites/npc-*.png', { eager: true, query: '?inline', import: 'default' });
 for (const [path, url] of Object.entries(NPC_FILES)) renderer.setNpcImage(path.match(/npc-([\w-]+)\.png$/)![1], url);
+// Pete's slapping arm, drawn across the bar from the hand-drawn sleeve and hand.
+import peteArmUrl from './assets/sprites/pete-arm.png?inline';
+renderer.setArmImage(peteArmUrl);
 
 const DRINK_COLOR: Record<string, string> = { beer: '#e8b24a', rye: '#b5652c', whiskey: '#c77b2e', sarsaparilla: '#5a2c17', water: '#bfe0ea' };
 

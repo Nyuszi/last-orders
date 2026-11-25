@@ -164,6 +164,40 @@ export class Renderer {
     img.src = url;
   }
 
+  /** Pete's pose tracking: last arm extension, whether the arm is on its way back, last pose, a pending head slam. */
+  private peteArmLast = 0;
+  private peteArmBack = false;
+  private petePose: 'lean' | 'slip' | 'drop' = 'lean';
+  private peteSlam: { side: 'left' | 'right'; frame: number } | null = null;
+
+  /** Pete's hand-drawn slapping arm (48×10, hand on the left, sleeve cut flat on the right), and its mirror. */
+  private armImg: Record<'handLeft' | 'handRight', { img: HTMLCanvasElement; shadow: HTMLCanvasElement }> | null = null;
+
+  setArmImage(url: string) {
+    const img = new Image();
+    img.onload = () => {
+      const make = (mirror: boolean) => {
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const g = c.getContext('2d')!;
+        if (mirror) { g.translate(img.width, 0); g.scale(-1, 1); }
+        g.drawImage(img, 0, 0);
+        const shadow = document.createElement('canvas');
+        shadow.width = c.width;
+        shadow.height = c.height;
+        const sg = shadow.getContext('2d')!;
+        sg.drawImage(c, 0, 0);
+        sg.globalCompositeOperation = 'source-in';
+        sg.fillStyle = PAL.shadow;
+        sg.fillRect(0, 0, c.width, c.height);
+        return { img: c, shadow };
+      };
+      this.armImg = { handLeft: make(false), handRight: make(true) };
+    };
+    img.src = url;
+  }
+
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
     this.buf = document.createElement('canvas');
@@ -423,8 +457,14 @@ export class Renderer {
     let bob = 0;
     let artKey: string = id;
     if (id === 'pete') {
-      // Leaning on his elbow while asleep; the elbow slips, then the arm is out across the bar.
-      const pose = armExt < 0.03 ? 'lean' : armExt < 0.3 ? 'slip' : 'drop';
+      // Asleep on his elbow; his head drops onto the bar while the arm reaches out, and he
+      // stays startled awake until the arm is fully back.
+      if (armExt < 0.03) this.peteArmBack = false;
+      else if (armExt < this.peteArmLast - 1e-4) this.peteArmBack = true;
+      this.peteArmLast = armExt;
+      const pose = armExt < 0.03 ? 'lean' : this.peteArmBack ? 'drop' : 'slip';
+      if (pose === 'slip' && this.petePose === 'lean') this.peteSlam = { side, frame: this.frame };
+      this.petePose = pose;
       map = PETE_POSES[pose][side];
       if (pose === 'lean' && Math.floor(this.frame / 40) % 2) bob = side === 'left' ? -1 : 1;
       const allPoses = (['lean', 'slip', 'drop'] as const).every((p) => this.npcImgs.has(`pete-${p}`));
@@ -441,6 +481,26 @@ export class Renderer {
       const x0 = handEdge + (x - pos.x) + bob, y0 = Math.round(py - h / 2 + armShift);
       this.g.drawImage(art.shadow, x0 + 1, y0 + 1);
       this.g.drawImage(art.img, x0, y0);
+      // His head hits the bar: a burst of sparks at the forehead (the rail side of the sprite).
+      if (id === 'pete' && this.peteSlam) {
+        const t = this.frame - this.peteSlam.frame;
+        const hx = side === 'right' ? x0 + 3 : x0 + w - 3, hy = Math.round(y0 + h / 2);
+        if (t === 0) {
+          this.burst(hx / S, hy / S, PAL.brassLight, 14, 2.6);
+          this.burst(hx / S, hy / S, PAL.cream, 8, 1.8);
+        }
+        // A comic impact star: short rays fanning away from the forehead, growing then gone.
+        // White, not gold, so it stands out against the brass rail.
+        if (t < 14) {
+          const out = side === 'right' ? -1 : 1, r0 = 4 + (t >> 2), len = t < 9 ? 4 : 2;
+          for (const [dx, dy] of [[1, 0], [0.85, -0.85], [0.85, 0.85], [0.3, -1], [0.3, 1]] as const) {
+            for (let i = 0; i < len; i++) {
+              const px = Math.round(hx + out * dx * (r0 + i)), py2 = Math.round(hy + dy * (r0 + i));
+              this.rect(px, py2, 1, 1, i < len - 1 ? '#ffffff' : PAL.amber);
+            }
+          }
+        } else this.peteSlam = null;
+      }
       return;
     }
     const grid = smoothShaded(map, NPC_PAL[id]);
@@ -700,6 +760,31 @@ export class Renderer {
     let x0 = P(arm.position.x - w / 2), x1 = P(arm.position.x + w / 2);
     if (handAtLeft) x1 = Math.max(x0 + 4, shoulder); else x0 = Math.min(x1 - 4, shoulder);
     const y = P(arm.position.y);
+    if (this.armImg) {
+      // Hand at the tip of the physics arm; the sleeve runs back to just under Pete's own sleeve
+      // at the rail (not behind his body), trimmed or stretched to fit.
+      const art = handAtLeft ? this.armImg.handLeft : this.armImg.handRight;
+      const aw = art.img.width, ah = art.img.height;
+      const tip = handAtLeft ? x0 : x1;
+      const shoulderAt = handAtLeft ? HAND_EDGE_RIGHT + 3 : HAND_EDGE_LEFT - 3;
+      const len = Math.max(10, Math.abs(shoulderAt - tip));
+      // 2px lower than centred, so the arm lines up with Pete's sleeve.
+      const top = y - Math.floor(ah / 2) + 2;
+      for (const layer of [art.shadow, art.img]) {
+        const o = layer === art.shadow ? 1 : 0;
+        // The hand end first (up to the whole image), then repeat a stretch of plain sleeve.
+        const first = Math.min(len, aw);
+        if (handAtLeft) this.g.drawImage(layer, 0, 0, first, ah, tip + o, top + o, first, ah);
+        else this.g.drawImage(layer, aw - first, 0, first, ah, tip - first + o, top + o, first, ah);
+        const SLEEVE = 12; // columns of plain sleeve near the cut end, used to lengthen the arm
+        for (let done = first; done < len; done += SLEEVE) {
+          const n = Math.min(SLEEVE, len - done);
+          if (handAtLeft) this.g.drawImage(layer, aw - SLEEVE, 0, n, ah, tip + done + o, top + o, n, ah);
+          else this.g.drawImage(layer, SLEEVE - n, 0, n, ah, tip - done - n + o, top + o, n, ah);
+        }
+      }
+      return;
+    }
     // Same sleeve and hand as the arm that drops in Pete's sprite: an 8 px grey sleeve, a skin-tone hand.
     this.rect(x0, y - 4, x1 - x0, 8, PETE_ARM.outline);
     this.rect(x0, y - 3, x1 - x0, 6, PETE_ARM.sleeve);
