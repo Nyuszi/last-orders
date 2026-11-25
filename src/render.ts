@@ -164,6 +164,31 @@ export class Renderer {
     img.src = url;
   }
 
+  /** Hand-drawn bar items ("item-<name>.png"), drawn centred on the item at their own size. */
+  private itemImgs = new Map<string, { img: HTMLImageElement | HTMLCanvasElement; shadow: HTMLCanvasElement }>();
+
+  setItemImage(name: string, url: string) {
+    const img = new Image();
+    img.onload = () => {
+      const shadow = document.createElement('canvas');
+      shadow.width = img.width;
+      shadow.height = img.height;
+      const sg = shadow.getContext('2d')!;
+      sg.drawImage(img, 0, 0);
+      sg.globalCompositeOperation = 'source-in';
+      sg.fillStyle = PAL.shadow;
+      sg.fillRect(0, 0, img.width, img.height);
+      this.itemImgs.set(name, { img, shadow });
+    };
+    img.src = url;
+  }
+
+  private drawItem(art: { img: HTMLImageElement | HTMLCanvasElement; shadow: HTMLCanvasElement }, cx: number, cy: number) {
+    const x0 = Math.round(cx - art.img.width / 2), y0 = Math.round(cy - art.img.height / 2);
+    this.g.drawImage(art.shadow, x0 + 1, y0 + 1);
+    this.g.drawImage(art.img, x0, y0);
+  }
+
   /** Customers playing a reaction animation: what kind, and the frame it started. */
   private anims = new Map<NpcId, { kind: 'drink' | 'peanuts'; start: number }>();
 
@@ -666,15 +691,67 @@ export class Renderer {
     const pulse = Math.floor(this.frame / 12) % 2, rr = P(wr) + 3;
     this.ring(x, y, rr + pulse, PAL.danger, 3, Math.floor(this.frame / 6));
     this.ring(x, y, rr + 2 + pulse, '#7a2a1a', 3, Math.floor(this.frame / 6) + 3);
-    const map = kind === 'tap' ? TAP : TIPJAR;
-    const pal = kind === 'tap' ? TAP_PAL : ITEM_PAL;
-    this.sprite(map, pal, x + 1, y + 1, PAL.shadow);
-    this.sprite(map, pal, x, y);
+    const art = this.itemImgs.get(kind);
+    if (art) this.drawItem(art, x, y);
+    else {
+      const map = kind === 'tap' ? TAP : TIPJAR;
+      const pal = kind === 'tap' ? TAP_PAL : ITEM_PAL;
+      this.sprite(map, pal, x + 1, y + 1, PAL.shadow);
+      this.sprite(map, pal, x, y);
+    }
     // Something to avoid: the same small warning sign as the sheriff's hat.
     this.drawWarning(x + 7, y - 11);
   }
 
+  /**
+   * The hand-drawn knocked-over glass (item-tipped.png: a whiskey tumbler on its side, open end to
+   * the right) recoloured for this drink and turned the way it fell. Cached per drink and direction.
+   */
+  private tippedArt(drink: Drink, dir: 'right' | 'down' | 'left' | 'up') {
+    const key = `tipped-${drink}-${dir}`;
+    const done = this.itemImgs.get(key);
+    if (done) return done;
+    const base = this.itemImgs.get('tipped');
+    if (!base) return null;
+    const w = base.img.width, h = base.img.height;
+    // Recolour the amber whiskey (orange pixels) to this drink, keeping each pixel's lightness.
+    const tint = document.createElement('canvas');
+    tint.width = w; tint.height = h;
+    const tg = tint.getContext('2d')!;
+    tg.drawImage(base.img, 0, 0);
+    if (drink !== 'whiskey') {
+      const d = tg.getImageData(0, 0, w, h), p = d.data;
+      const to = DRINK[drink], tr = parseInt(to.slice(1, 3), 16), tgc = parseInt(to.slice(3, 5), 16), tb = parseInt(to.slice(5, 7), 16);
+      for (let i = 0; i < p.length; i += 4) {
+        const r = p[i], g = p[i + 1], b = p[i + 2];
+        if (p[i + 3] === 0 || !(r > g && g > b && r - b > 70)) continue;
+        const k = (r + g + b) / (0xc7 + 0x7b + 0x2e); // relative to the whiskey colour #c77b2e
+        p[i] = Math.min(255, tr * k); p[i + 1] = Math.min(255, tgc * k); p[i + 2] = Math.min(255, tb * k);
+      }
+      tg.putImageData(d, 0, 0);
+    }
+    const turned = dir === 'right' || dir === 'left';
+    const c = document.createElement('canvas');
+    c.width = turned ? w : h; c.height = turned ? h : w;
+    const g = c.getContext('2d')!;
+    g.translate(c.width / 2, c.height / 2);
+    g.rotate({ right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 }[dir]);
+    g.drawImage(tint, -w / 2, -h / 2);
+    const shadow = document.createElement('canvas');
+    shadow.width = c.width; shadow.height = c.height;
+    const sg = shadow.getContext('2d')!;
+    sg.drawImage(c, 0, 0);
+    sg.globalCompositeOperation = 'source-in';
+    sg.fillStyle = PAL.shadow;
+    sg.fillRect(0, 0, c.width, c.height);
+    const art = { img: c, shadow };
+    this.itemImgs.set(key, art);
+    return art;
+  }
+
   private drawGlass(wx: number, wy: number, drink: Drink) {
+    const art = this.itemImgs.get(drink);
+    if (art) { this.drawItem(art, P(wx), P(wy)); return; }
     const map = drink === 'beer' ? GLASS_BEER : GLASS;
     const pal = glassPal(drink);
     this.sprite(map, pal, P(wx) + 1, P(wy) + 1, PAL.shadow);
@@ -691,7 +768,9 @@ export class Renderer {
         if (gl.floor) continue;
         const ca = Math.cos(gl.tipAngle), sa = Math.sin(gl.tipAngle);
         const dir = Math.abs(ca) > Math.abs(sa) ? (ca > 0 ? 'right' : 'left') : sa > 0 ? 'down' : 'up';
-        this.sprite(TIPPED[dir], glassPal(gl.drink), P(gl.tipX), P(gl.tipY));
+        const art = this.tippedArt(gl.drink, dir);
+        if (art) this.drawItem(art, P(gl.tipX), P(gl.tipY));
+        else this.sprite(TIPPED[dir], glassPal(gl.drink), P(gl.tipX), P(gl.tipY));
         continue;
       }
       if (!gl.body) continue;
@@ -709,14 +788,22 @@ export class Renderer {
         this.ring(x, y, 9 + pulse, PAL.danger, 3, Math.floor(this.frame / 6));
         this.ring(x, y, 11 + pulse, '#7a2a1a', 3, Math.floor(this.frame / 6) + 3);
         this.drawWarning(x + 8, y - 9);
-        this.sprite(HAT, HAT_PAL, x, y + 1, PAL.shadow);
-        this.sprite(HAT, HAT_PAL, x, y);
+        const hat = this.itemImgs.get('hat');
+        if (hat) this.drawItem(hat, x, y);
+        else {
+          this.sprite(HAT, HAT_PAL, x, y + 1, PAL.shadow);
+          this.sprite(HAT, HAT_PAL, x, y);
+        }
       } else {
         if (!p.touched) this.ring(x, y, P(PROP_R.cards) + 3, PAL.cream, 1);
         this.sprite(CARDS, ITEM_PAL, x + 1, y + 1, PAL.shadow);
         this.sprite(CARDS, ITEM_PAL, x, y);
         // Knocked: the hidden ace slides out from under the deck.
-        if (p.touched) this.sprite(ACE, ITEM_PAL, x + 6, y + 4);
+        if (p.touched) {
+          const ace = this.itemImgs.get('ace');
+          if (ace) this.drawItem(ace, x + 6, y + 4);
+          else this.sprite(ACE, ITEM_PAL, x + 6, y + 4);
+        }
       }
     }
   }
@@ -785,11 +872,16 @@ export class Renderer {
     };
     dot(6, -17, 2);
     dot(3, -23 + Math.round(bob / 2), 3);
-    this.sprite(BOWL, BOWL_PAL, cx, cy + 1);
+    // The same hand-drawn bowl as on the bar (no shadow: it's a thought).
+    const bowl = this.itemImgs.get('peanuts');
+    if (bowl) g.drawImage(bowl.img, Math.round(cx - bowl.img.width / 2), Math.round(cy + 1 - bowl.img.height / 2));
+    else this.sprite(BOWL, BOWL_PAL, cx, cy + 1);
   }
 
   private drawBowl(wx: number, wy: number) {
     const x = P(wx), y = P(wy);
+    const art = this.itemImgs.get('peanuts');
+    if (art) { this.drawItem(art, x, y); return; }
     this.sprite(BOWL, BOWL_PAL, x + 1, y + 1, PAL.shadow);
     this.sprite(BOWL, BOWL_PAL, x, y);
   }

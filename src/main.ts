@@ -18,6 +18,9 @@ const renderer = new Renderer(canvas);
 // Hand-drawn customer sprites ("npc-<id>.png", 32×28 facing down; Pete: "npc-pete-<lean|slip|drop>.png") replace the built-in maps.
 const NPC_FILES = import.meta.glob<string>('./assets/sprites/npc-*.png', { eager: true, query: '?inline', import: 'default' });
 for (const [path, url] of Object.entries(NPC_FILES)) renderer.setNpcImage(path.match(/npc-([\w-]+)\.png$/)![1], url);
+// Hand-drawn bar items ("item-<name>.png", e.g. item-peanuts.png), drawn at their own size.
+const ITEM_FILES = import.meta.glob<string>('./assets/sprites/item-*.png', { eager: true, query: '?inline', import: 'default' });
+for (const [path, url] of Object.entries(ITEM_FILES)) renderer.setItemImage(path.match(/item-([\w-]+)\.png$/)![1], url);
 // Reaction animations ("anim-<id>-drink-<n>.png", "anim-pete-peanuts-<n>.png"), keyed by file name.
 const ANIM_FILES = import.meta.glob<string>('./assets/sprites/anim-*.png', { eager: true, query: '?inline', import: 'default' });
 for (const [path, url] of Object.entries(ANIM_FILES)) renderer.setNpcImage(path.match(/(anim-[\w-]+)\.png$/)![1], url);

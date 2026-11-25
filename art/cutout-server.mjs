@@ -57,7 +57,7 @@ http.createServer((req, res) => {
   // POST the PNG as base64 text to /save-sprite?name=anim-dutch-drink-1 -> src/assets/sprites/<name>.png
   if (req.method === 'POST' && url.pathname === '/save-sprite') {
     const name = url.searchParams.get('name') ?? '';
-    if (!/^(npc|anim|pete)-[a-z0-9-]+$/.test(name)) return send(res, 400, 'text/plain', 'bad name');
+    if (!/^(npc|anim|pete|item)-[a-z0-9-]+$/.test(name)) return send(res, 400, 'text/plain', 'bad name');
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => {

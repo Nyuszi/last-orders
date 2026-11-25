@@ -4,7 +4,7 @@
 //   -> art/sprite-sheet.svg     (just the sprites)
 //   -> art/sprite-prompts.html  (each sprite with its full prompt and a Copy button)
 //   -> art/SPRITE_PROMPTS.md    (the same prompts as text)
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import {
   ACE, BOWL, BOWL_PAL, CARDS, GLASS, GLASS_BEER, GLASS_TIPPED, HAT, HAT_PAL, ITEM_PAL, NPC_PAL, NPC_SPRITES,
@@ -29,36 +29,46 @@ const sections: { title: string; tip?: string; items: Entry[] }[] = [
   {
     title: 'On the bar',
     items: [
-      { file: 'hat.png', name: "Sheriff's hat", note: "don't touch", map: HAT, pal: HAT_PAL,
-        prompt: "The sheriff's brown cowboy hat lying right side up: an oval tan brim (#d8b47a) around a darker crown with a dent in the middle, and a thin dark brown hat band with a small gold buckle. Wider than it is tall." },
-      { file: 'peanuts.png', name: 'Peanut bowl', note: 'bonus: push it to Pete', map: BOWL, pal: BOWL_PAL,
-        prompt: "A round wooden bowl full of roasted peanuts in their shells: a dark wooden rim, light tan peanuts inside with a few darker shell marks. Slightly wider than tall." },
-      { file: 'cards.png', name: "Lavinia's cards", note: 'bonus: knock them', map: CARDS, pal: ITEM_PAL,
-        prompt: "A small fanned-out stack of playing cards: four or five white cards with red and black suit marks, slightly spread like a fan." },
-      { file: 'ace.png', name: 'Hidden ace', note: 'shows when the cards are hit', map: ACE, pal: ITEM_PAL,
-        prompt: "A single ace of spades playing card: a white card with one large black spade in the middle. A very simple, bold shape." },
+      { file: 'hat.png', name: "Sheriff's hat", note: "don't touch (drawn 18×13, bigger than before)", map: HAT, pal: HAT_PAL, target: [18, 13],
+        view: 'seen from a steep three-quarter angle from above and in front, like a hat lying on a table seen by someone standing at the table, so it clearly reads as a cowboy hat and not a ring, with no table or background shown.',
+        prompt: "The sheriff's brown cowboy hat lying right side up: a tall dark brown crown (#8a5a2b) with a dent on top, a thin dark band with a small gold buckle (#f2b53a) on the front, and a wide tan brim (#d8b47a) curled up at both sides. Wider than it is tall." },
+      { file: 'peanuts.png', name: 'Peanut bowl', note: 'bonus: push it to Pete (drawn 18×13, bigger than before)', map: BOWL, pal: BOWL_PAL, target: [18, 13],
+        view: 'seen from a steep three-quarter angle from above and in front, so you see the inside of the bowl and its front side, with no table or background shown.',
+        prompt: 'A small round wooden bowl (#6e4226 with a lighter #a0683c rim) heaped with 4 or 5 big roasted peanuts in their shells. Each peanut is a pale tan (#e3c08a) figure-eight shape about 3 blocks long and 2 blocks wide with a single darker tan (#b08a52) block in its waist, and they are clearly separated by dark gaps. Use only 5 colours inside the outline. Slightly wider than tall.' },
+      { file: 'cards.png', name: "Lavinia's cards", note: 'bonus: knock them (drawn 16×12, bigger than before)', map: CARDS, pal: ITEM_PAL, target: [16, 12],
+        prompt: 'Exactly three playing cards lying flat and fanned out from one corner, each a clean white rectangle (#f3e6cc) about 6 blocks wide and 9 blocks tall with straight edges and square corners, overlapping so the fan is wider than tall. The front card shows one big red diamond (#c0392b) 2 blocks wide in its middle, the card behind shows one black spade, the back card is plain. Each card has its own dark outline so the three cards are easy to tell apart.' },
+      { file: 'ace.png', name: "Hidden ace", note: "shows when the cards are hit (drawn 8×11, bigger than before)", map: ACE, pal: ITEM_PAL, target: [8, 11],
+        view: "seen from directly above (top-down), lying flat, with no table or background shown.",
+        prompt: "A single ace of spades playing card: a plain white (#f3e6cc) upright rectangle with straight edges and square corners, a one-block dark outline of the same thickness on all four sides, and one big black spade in the middle about 4 blocks wide and 5 tall. No corner letters, no shadow, no other marks." },
       { file: 'tap.png', name: 'Beer tap', note: 'spills a drink', map: TAP, pal: TAP_PAL,
         prompt: "A brass beer tap: a round shiny brass base, a steel spout, and a black handle with a red ring pointing up. Round overall." },
-      { file: 'tipjar.png', name: 'Tip jar', note: 'spills a drink', map: TIPJAR, pal: ITEM_PAL,
-        prompt: "A glass tip jar: a round clear glass rim with a few gold coins and a folded green banknote visible inside." },
+      { file: 'tipjar.png', name: "Tip jar", note: "spills a drink (drawn 15×14, bigger than before)", map: TIPJAR, pal: ITEM_PAL, target: [15, 14],
+        view: "seen from a steep three-quarter angle from above and in front, so you see the round open top and the glass side of the jar, with no table, counter or background shown.",
+        prompt: "A short round glass tip jar: pale blue-grey glass (#cfe3e6, a lighter #eef7f7 stripe for shine) with a darker rim, holding 3 or 4 round gold coins (#f2b53a), each a 2-block disc, and one folded green banknote (#6dbb4a) sticking up out of the top. Use only 6 colours inside the outline. Slightly wider than tall." },
     ],
   },
   {
     title: 'Drinks',
-    tip: 'Make the beer first, then attach it for the others so every glass has the same size and shape.',
+    tip: 'Make the beer first, then attach your beer result for the other glasses (and your whiskey for the knocked-over one) so every glass has the same size and shape. Don\'t attach the old small sprites for these.',
     items: [
-      { file: 'beer.png', name: 'Beer', note: 'mug', map: GLASS_BEER, pal: glassPal('beer'),
-        prompt: "A beer mug: a round glass rim, golden beer (#e8b24a) with a white foam head, a small handle sticking out to the right, and one white highlight block on the rim." },
-      { file: 'whiskey.png', name: 'Whiskey', note: 'glass', map: GLASS, pal: glassPal('whiskey'), attach: 'beer.png',
-        prompt: "A short whiskey glass the same size and style as the attached beer mug but with no handle: a round clear glass rim, amber whiskey (#c77b2e) inside, and one white highlight block on the rim." },
-      { file: 'rye.png', name: 'Rye', note: 'glass', map: GLASS, pal: glassPal('rye'), attach: 'beer.png',
-        prompt: "A short whiskey glass the same size and style as the attached beer mug but with no handle: a round clear glass rim, reddish-brown rye whiskey (#b5652c) inside, and one white highlight block on the rim." },
-      { file: 'sarsaparilla.png', name: 'Sarsaparilla', note: 'glass', map: GLASS, pal: glassPal('sarsaparilla'), attach: 'beer.png',
-        prompt: "A short glass the same size and style as the attached beer mug but with no handle: a round clear glass rim, very dark brown sarsaparilla (#5a2c17) with a little tan foam at the edge, and one white highlight block on the rim." },
-      { file: 'water.png', name: 'Water', note: 'glass', map: GLASS, pal: glassPal('water'), attach: 'beer.png',
-        prompt: "A short glass the same size and style as the attached beer mug but with no handle: a round clear glass rim, pale blue water (#bfe0ea) inside, and one white highlight block on the rim." },
-      { file: 'tipped.png', name: 'Knocked over', note: 'spilled glass', map: GLASS_TIPPED, pal: glassPal('whiskey'), attach: 'whiskey.png',
-        prompt: "The attached whiskey glass knocked over on its side: the glass lying sideways with its open end to the right, and a small splash of amber whiskey spilling out of the open end." },
+      { file: 'beer.png', name: "Beer", note: "mug (drawn 12×11, bigger than before). Make this one first.", map: GLASS_BEER, pal: glassPal('beer'), target: [12, 11],
+        view: "seen from a steep three-quarter angle from above and in front, so you see the round rim, the drink inside and a little of the glass side, with no table, counter or background shown.",
+        prompt: "A chunky glass beer mug: golden beer (#e8b24a) as one flat block of colour, a thick white foam head (#f3efe0) on top, a pale glass rim, and a big handle sticking out to the right. Use only 5 colours inside the outline." },
+      { file: 'whiskey.png', name: "Whiskey", note: "glass (drawn 12×11)", map: GLASS, pal: glassPal('whiskey'), attach: 'beer.png', target: [12, 11],
+        view: "seen from a steep three-quarter angle from above and in front, so you see the round rim, the drink inside and a little of the glass side, with no table, counter or background shown.",
+        prompt: "A short, wide whisky tumbler with no handle, the same size, angle and style as the attached beer mug: amber whiskey (#c77b2e) filling it as one flat block of colour, a pale glass rim (#dfeaea) and one white highlight block on the rim. Use only 5 colours inside the outline." },
+      { file: 'rye.png', name: "Rye", note: "glass (drawn 12×11)", map: GLASS, pal: glassPal('rye'), attach: 'beer.png', target: [12, 11],
+        view: "seen from a steep three-quarter angle from above and in front, so you see the round rim, the drink inside and a little of the glass side, with no table, counter or background shown.",
+        prompt: "A short, wide whisky tumbler with no handle, the same size, angle and style as the attached beer mug: reddish-brown rye whiskey (#b5652c) filling it as one flat block of colour, a pale glass rim (#dfeaea) and one white highlight block on the rim. Use only 5 colours inside the outline." },
+      { file: 'sarsaparilla.png', name: "Sarsaparilla", note: "glass (drawn 12×11)", map: GLASS, pal: glassPal('sarsaparilla'), attach: 'beer.png', target: [12, 11],
+        view: "seen from a steep three-quarter angle from above and in front, so you see the round rim, the drink inside and a little of the glass side, with no table, counter or background shown.",
+        prompt: "A short, wide whisky tumbler with no handle, the same size, angle and style as the attached beer mug: very dark brown sarsaparilla (#5a2c17) filling it as one flat block of colour with a thin tan foam line (#c9a77a) on top, a pale glass rim (#dfeaea) and one white highlight block on the rim. Use only 5 colours inside the outline." },
+      { file: 'water.png', name: "Water", note: "glass (drawn 12×11)", map: GLASS, pal: glassPal('water'), attach: 'beer.png', target: [12, 11],
+        view: "seen from a steep three-quarter angle from above and in front, so you see the round rim, the drink inside and a little of the glass side, with no table, counter or background shown.",
+        prompt: "A short, wide whisky tumbler with no handle, the same size, angle and style as the attached beer mug: pale blue water (#bfe0ea) filling it as one flat block of colour, a pale glass rim (#dfeaea) and one white highlight block on the rim. Use only 5 colours inside the outline." },
+      { file: 'tipped.png', name: "Knocked over", note: "spilled glass (drawn 14×8)", map: GLASS_TIPPED, pal: glassPal('whiskey'), attach: 'whiskey.png', target: [14, 8],
+        view: "seen from directly above (top-down), with no table or background shown.",
+        prompt: "The attached whiskey tumbler knocked over and lying on its side, its open end pointing right, with a flat amber (#c77b2e) puddle of 3 or 4 blocks spilling out of the open end. Use only 5 colours inside the outline." },
     ],
   },
   {
@@ -130,6 +140,14 @@ function writeRef(it: Entry) {
     const gx = Math.floor(x / BLOCK) - M, gy = Math.floor(y / BLOCK) - M;
     if (gx < 0 || gy < 0 || gx >= w || gy >= h) return [255, 0, 255];
     if (shaded) { const c = shaded[gy]?.[gx]; return c ? hex(c) : [255, 0, 255]; }
+    // Drawn bigger than its old map: show the old sprite unstretched in the middle of the new
+    // grid, and faint grid lines over the whole new grid so the block count is easy to see.
+    if (!it.character && (w !== mw || h !== mh)) {
+      const ox = Math.floor((w - mw) / 2), oy = Math.floor((h - mh) / 2);
+      const ch = it.map[gy - oy]?.[gx - ox];
+      if (ch && ch !== '.') return hex(it.pal[ch] ?? '#ff00ff');
+      return x % BLOCK === 0 || y % BLOCK === 0 ? [214, 0, 214] : [255, 0, 255];
+    }
     const ch = it.map[Math.floor((gy * mh) / h)][Math.floor((gx * mw) / w)];
     return ch === '.' ? [255, 0, 255] : hex(it.pal[ch] ?? '#ff00ff');
   });
@@ -137,13 +155,13 @@ function writeRef(it: Entry) {
   writeFileSync(new URL(`../art/sprite-refs/${refName(it)}`, import.meta.url), buf);
 }
 mkdirSync(new URL('../art/sprite-refs/', import.meta.url), { recursive: true });
-for (const sec of sections) for (const it of sec.items) writeRef(it);
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 /** One sprite as SVG rects. */
 /** The approved hand-drawn PNG the game uses for this entry, if there is one (see setNpcImage in src/render.ts). */
 function gameImage(it: Entry): string | null {
-  const name = { 'pete-lean.png': 'npc-pete-lean.png', 'pete-slip.png': 'npc-pete-slip.png', 'pete-slap.png': 'npc-pete-drop.png' }[it.file] ?? it.file;
+  const name = { 'pete-lean.png': 'npc-pete-lean.png', 'pete-slip.png': 'npc-pete-slip.png', 'pete-slap.png': 'npc-pete-drop.png' }[it.file]
+    ?? (it.file.startsWith('npc-') ? it.file : `item-${it.file}`); // bar items and drinks are saved as item-<file>
   const url = new URL(`../src/assets/sprites/${name}`, import.meta.url);
   return existsSync(url) ? readFileSync(url).toString('base64') : null;
 }
@@ -162,9 +180,16 @@ function spriteSvg(it: Entry, sc: number) {
 // The prompt pages list only what's still to do: a sprite is finished once its approved PNG is in
 // src/assets/sprites. Pete's single "customer" sprite is never drawn once his three poses exist.
 const peteDone = ['pete-lean.png', 'pete-slip.png', 'pete-slap.png'].every((file) => gameImage({ file } as Entry));
-const finished = (it: Entry) => gameImage(it) !== null || (it.file === 'npc-pete.png' && peteDone);
+// The hand-drawn slap arm (pete-arm.png) has its own hand, so the old palm sprite isn't drawn either.
+const armDone = existsSync(new URL('../src/assets/sprites/pete-arm.png', import.meta.url));
+const finished = (it: Entry) => gameImage(it) !== null || (it.file === 'npc-pete.png' && peteDone) || (it.file === 'pete-palm.png' && armDone);
 // A section's tip is about its whole set, so it goes once part of the set is done.
 const todo = sections.map((sec) => ({ ...sec, tip: sec.items.some(finished) ? undefined : sec.tip, items: sec.items.filter((it) => !finished(it)) })).filter((sec) => sec.items.length);
+// Reference pictures only for what's still to do; a finished sprite's old reference is removed.
+for (const sec of sections) for (const it of sec.items) {
+  if (finished(it)) rmSync(new URL(`../art/sprite-refs/${refName(it)}`, import.meta.url), { force: true });
+  else writeRef(it);
+}
 const doneNames = sections.flatMap((sec) => sec.items.filter(finished).map((it) => it.name));
 
 // ---- 1. The plain sheet (SVG) ----
