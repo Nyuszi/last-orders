@@ -1147,7 +1147,7 @@ const EVENT_SFX: Partial<Record<SimEvent['t'], SfxId>> = {
 };
 /** Phone vibration for what happens on the bar (ms, or buzz-pause-buzz patterns). Play only. */
 const EVENT_BUZZ: Partial<Record<SimEvent['t'], number | number[]>> = {
-  contact: 10, bank: 10, thud: 16, tip: 35, smash: 60, slam: 70, warn: [40, 60, 40], leave: 120,
+  contact: 10, bank: 10, thud: 16, tip: 35, smash: 60, warn: [40, 60, 40], leave: 120,
   bonus: [15, 30, 15], combo: [30, 40, 30, 40, 60],
 };
 function playEvent(ev: SimEvent) {
