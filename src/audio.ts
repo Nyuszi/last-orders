@@ -67,9 +67,9 @@ const SFX = {
 } satisfies Record<string, (p: number) => V[]>;
 export type SfxId = keyof typeof SFX;
 
-// ---------------- Settings: music and effects on/off (this device only) ----------------
+// ---------------- Settings: music, effects and vibration on/off (this device only) ----------------
 const KEY = 'lo-sound-on';
-let on = { music: true, sfx: true };
+let on = { music: true, sfx: true, vib: true };
 try { on = { ...on, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }; } catch { /* storage unavailable */ }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(on)); } catch { /* private mode */ } }
 
@@ -159,6 +159,26 @@ export function sfx(id: SfxId, p = 0) {
   for (const v of SFX[id](Math.max(0, Math.min(1, p)))) voice(c, v, now + 0.005);
 }
 
+// ---------------- Vibration ----------------
+// Phones that let a web page vibrate (most Android browsers; never iPhones, and some apps block
+// it inside an embedded post). Elsewhere this does nothing and the menu hides the switch.
+// Desktop Chrome has the call too but can't vibrate, so touch screens only.
+export const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function'
+  && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+let lastBuzz = 0;
+/**
+ * A short buzz (ms), or a pattern [buzz, pause, buzz, ...]. A new one replaces the one playing,
+ * so the last event wins (served, then bonus, then combo). Single buzzes piling up within 60 ms
+ * (glasses clinking) play once.
+ */
+export function buzz(pattern: number | number[]) {
+  if (!on.vib || !canVibrate || document.hidden) return;
+  const now = performance.now();
+  if (typeof pattern === 'number' && now - lastBuzz < 60) return;
+  lastBuzz = now;
+  try { navigator.vibrate(pattern); } catch { /* blocked here: nothing to do */ }
+}
+
 // ---------------- Music ----------------
 let track: HTMLAudioElement | null = null;
 function syncMusic() {
@@ -187,12 +207,12 @@ document.addEventListener('visibilitychange', () => {
   syncMusic();
 });
 
-// ---------------- The sound menu: music on/off, effects on/off ----------------
+// ---------------- The sound menu: music, effects and vibration on/off ----------------
 export function mountSoundPanel(panel: HTMLElement, toggle: HTMLElement) {
   const sync = () => {
     toggle.classList.toggle('muted', !on.music && !on.sfx);
     toggle.setAttribute('aria-expanded', String(!panel.hidden));
-    for (const k of ['music', 'sfx'] as const) {
+    for (const k of ['music', 'sfx', 'vib'] as const) {
       panel.querySelectorAll<HTMLButtonElement>(`[data-snd="${k}"]`).forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.val === 'on') === on[k])));
     }
   };
@@ -200,12 +220,16 @@ export function mountSoundPanel(panel: HTMLElement, toggle: HTMLElement) {
     <div class="snd-row"><span class="snd-label">Music</span><div class="snd-opts">
       <button type="button" data-snd="music" data-val="on">On</button><button type="button" data-snd="music" data-val="off">Off</button></div></div>
     <div class="snd-row"><span class="snd-label">Effects</span><div class="snd-opts">
-      <button type="button" data-snd="sfx" data-val="on">On</button><button type="button" data-snd="sfx" data-val="off">Off</button></div></div>`;
+      <button type="button" data-snd="sfx" data-val="on">On</button><button type="button" data-snd="sfx" data-val="off">Off</button></div></div>${canVibrate ? `
+    <div class="snd-row"><span class="snd-label">Vibration</span><div class="snd-opts">
+      <button type="button" data-snd="vib" data-val="on">On</button><button type="button" data-snd="vib" data-val="off">Off</button></div></div>` : ''}`;
   panel.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-snd]');
     if (!b) return;
-    on[b.dataset.snd as 'music' | 'sfx'] = b.dataset.val === 'on';
+    const k = b.dataset.snd as 'music' | 'sfx' | 'vib';
+    on[k] = b.dataset.val === 'on';
     save(); syncMusic(); sync();
+    if (k === 'vib' && on.vib) buzz(30); // a sample, so you feel what you turned on
   });
   const show = (open: boolean) => { panel.hidden = !open; sync(); };
   toggle.addEventListener('click', () => show(panel.hidden === true));

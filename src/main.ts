@@ -4,7 +4,7 @@ import { SERVE_REACH, Sim, STEP_MS, pointInPoly, type Shot, type SimEvent, type 
 import { SOLUTIONS } from './solutions';
 import { fetchNight, requestedDate } from './daily';
 import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';
-import { sfx, mountSoundPanel, type SfxId } from './audio';// Every portrait in assets/portraits is picked up automatically, keyed by its file name
+import { buzz, sfx, mountSoundPanel, type SfxId } from './audio';// Every portrait in assets/portraits is picked up automatically, keyed by its file name
 // ("<customer>-<mood>.webp"), so new art only has to be dropped into the folder.
 const PORTRAIT_FILES = import.meta.glob<string>('./assets/portraits/*.webp', { eager: true, query: '?inline', import: 'default' });
 // The beer tap's sprites (tower head, column strip, drip tray, knob), inlined like the portraits.
@@ -960,6 +960,7 @@ function shootCharged(min: number) {
   if (power < min || !canShoot()) { if (power > 0.01) sfx('tapCancel'); return; }
   if (sim.fire(aimAngle, power, spin)) {
     sfx('pour', power);
+    buzz(12 + Math.round(power * 18)); // the tap lets go: a harder pull kicks harder
     recorded = [...sim.shots];
     slowSteps = SLOW_STEPS;
     countTryIfFirstPour();
@@ -1141,7 +1142,16 @@ const EVENT_SFX: Partial<Record<SimEvent['t'], SfxId>> = {
   contact: 'clink', bank: 'bank', thud: 'thud', tip: 'spill', smash: 'smash',
   warn: 'warn', leave: 'leave', slam: 'slap', say: 'say',
 };
+/** Phone vibration for what happens on the bar (ms, or buzz-pause-buzz patterns). Play only. */
+const EVENT_BUZZ: Partial<Record<SimEvent['t'], number | number[]>> = {
+  contact: 10, bank: 10, thud: 16, tip: 35, smash: 60, slam: 70, warn: [40, 60, 40], leave: 120,
+  bonus: [15, 30, 15], combo: [30, 40, 30, 40, 60],
+};
 function playEvent(ev: SimEvent) {
+  if (mode === 'play') {
+    if (ev.t === 'served') buzz(ev.trick || ev.quality === 3 ? [25, 40, 25, 40, 40] : [18, 40, 18]);
+    else { const b = EVENT_BUZZ[ev.t]; if (b) buzz(b); }
+  }
   if (ev.t === 'served') sfx(ev.trick ? 'trick' : ev.quality === 3 ? 'perfect' : 'serve');
   else if (ev.t === 'bonus') sfx(ev.kind === 'peanuts' ? 'peanuts' : 'cards');
   else if (ev.t === 'combo') sfx('trick');
