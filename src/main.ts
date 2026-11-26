@@ -43,7 +43,7 @@ let replayShots: Shot[] = [];
 let recorded: Shot[] = [];
 let aim: Aim | null = null;
 /** A finger (or the mouse) held on the bar, aiming. */
-let drag: { x0: number; y0: number; moved: boolean } | null = null;
+let drag: { x0: number; y0: number; moved: boolean; wx0: number; aim0: number } | null = null;
 let acc = 0;
 let last = performance.now();
 let lastStatus: Status = 'aiming';
@@ -327,9 +327,12 @@ function introText(level: Level) {
   const hint = howToHint(level.hint);
   return matchMedia('(max-width: 520px)').matches ? `${level.blurb} ${hint}` : hint;
 }
+const AIM_HOW = 'Drag sideways on the bar to turn the aim';
 /** Nights generated before the beer tap still say "Drag back to pour"; tell them the new way. */
 function howToHint(hint: string) {
-  return /^drag back/i.test(hint) ? 'Touch the bar to aim, then pull the beer tap down and let go to pour. Stop each drink inside its dotted circle.' : hint;
+  if (/^drag back/i.test(hint)) return `${AIM_HOW}, then pull the beer tap down and let go to pour. Stop each drink inside its dotted circle.`;
+  // Stored nights still say "Touch the bar to aim" from when the aim jumped to your finger.
+  return hint.replace(/^touch the bar to aim/i, AIM_HOW);
 }
 // "?": bring the how-to overlay and its demo back at any point between pours.
 $('help-btn').onclick = () => {
@@ -839,12 +842,13 @@ function holdReact(ms: number) {
 }
 for (const el of [cutinEl, cutinLow]) el.addEventListener('pointerdown', (e) => { e.stopPropagation(); hideCutIn(el); });
 
-// ---------------- Input: touch the bar to aim, pull the beer tap to pour ----------------
+// ---------------- Input: drag on the bar to turn the aim, pull the beer tap to pour ----------------
 // Playtesters found one drag doing both jobs (angle = aim, length = strength) too sensitive:
 // any wobble while pulling for strength also swung the aim. Now they're two controls, like the
-// cue and the power stick in 8 Ball Pool. Touching the bar points the aim at your finger (the
-// further up the bar you touch, the finer the aim) and lifting the finger never pours. The tap
-// sets the strength and pours when you let go.
+// cue and the power stick in 8 Ball Pool. Dragging sideways anywhere on the bar turns the aim
+// from where it is (playtest: pointing the aim at the finger made it jump to each touch, and the
+// finger hid the line), 30% finer than pointing used to be. Lifting the finger never pours. The
+// tap sets the strength and pours when you let go.
 function toWorld(e: PointerEvent) {
   const r = canvas.getBoundingClientRect();
   return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
@@ -852,12 +856,16 @@ function toWorld(e: PointerEvent) {
 /** Screen px a finger may wander on the bar and still count as a tap (which explains an item). */
 const TAP_SLOP = 8;
 
-/** Points the aim from the drink to the finger. Touches right next to the glass are ignored. */
-function aimAtPointer(e: PointerEvent) {
-  const p = toWorld(e), s = sim.level.start;
-  const dx = p.x - s.x, dy = p.y - s.y;
-  if (Math.hypot(dx, dy) < 16) return;
-  aimAngle = clampAngle(Math.atan2(dy, dx));
+/**
+ * Radians the aim turns per unit (bar coordinates) the finger slides sideways. Pointing at a
+ * finger mid-bar (about 250 units from the drink) turned it 1/250 per unit; this is 30% less.
+ * A full drag across the bar turns the aim about 62 degrees.
+ */
+const AIM_PER_UNIT = 0.7 / 250;
+/** Turns the aim by how far the finger has slid sideways since it touched down. */
+function aimByDrag(e: PointerEvent) {
+  if (!drag) return;
+  aimAngle = clampAngle(drag.aim0 + (toWorld(e).x - drag.wx0) * AIM_PER_UNIT);
   aimTick();
 }
 /** A soft tick for every few degrees the aim turns, like a ratchet. */
@@ -881,16 +889,16 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   $('hint').classList.add('fade');
   tipEl.hidden = true;
-  drag = { x0: e.clientX, y0: e.clientY, moved: false };
-  aimAtPointer(e);
+  drag = { x0: e.clientX, y0: e.clientY, moved: false, wx0: toWorld(e).x, aim0: aimAngle };
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!drag) return;
   if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > TAP_SLOP) drag.moved = true;
-  aimAtPointer(e);
+  aimByDrag(e);
 });
 canvas.addEventListener('pointerup', (e) => {
   const tapped = !drag || !drag.moved;
+  if (tapped && drag) aimAngle = drag.aim0; // a tap explains an item; it doesn't nudge the aim
   drag = null;
   if (tapped) showTip(e, true);
 });
@@ -1311,6 +1319,7 @@ function frame(now: number) {
 // Read-only handle for automated checks (frame-by-frame motion tests).
 (window as unknown as { __lastOrders: object }).__lastOrders = {
   sim: () => sim,
+  aim: () => aimAngle,
   demo: () => demo && { shot: demo.i, fired: demo.fired, status: demo.sim.status, glasses: demo.sim.glasses?.map((g) => g.body ? [Math.round(g.body.position.x), Math.round(g.body.position.y), g.role] : null) },
 };
 
