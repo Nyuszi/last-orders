@@ -181,22 +181,26 @@ export function buzz(pattern: number | number[]) {
 }
 
 /**
- * While the tap is pulled down: the weight of the pull. Phones can't vibrate softer or harder,
- * only on and off, so strength is pulses: short buzzes with long gaps near the top (3 ms on,
- * 45 off), longer and closer together as the pull deepens (25 on, 6 off at full). Called every
- * frame; a new pattern is sent only as the last one runs out, so the feel follows the pull.
+ * While the tap is pulled down: the weight of the pull, as one steady hum that grows. Phones
+ * can't vibrate softer or harder, only on and off, so strength is how much of each 20 ms the
+ * motor is on. That's too quick for the motor to stop between pulses, so it feels like a
+ * continuous hum (playtest: slower pulses, 3 ms on and 44 off, felt like ticking). It starts at
+ * 40% on, already firm, and is a solid full buzz from about two thirds of the pull. Called every
+ * frame; the next pattern is sent before the last runs out, so there is never a gap.
  */
 let humUntil = 0;
 export function hum(level: number) {
   if (!on.vib || !canVibrate || document.hidden) return;
   const now = performance.now();
-  if (now < humUntil - 40) return;
+  if (now < humUntil - 60) return;
   const l = Math.max(0, Math.min(1, level));
-  const onMs = Math.round(3 + l * 22), offMs = Math.round(Math.max(6, 45 - l * 39));
-  const pattern: number[] = [];
-  let t = 0;
-  while (t < 140) { pattern.push(onMs, offMs); t += onMs + offMs; }
-  humUntil = now + t;
+  const PERIOD = 20, LENGTH = 180;
+  const onMs = Math.min(PERIOD, Math.round(PERIOD * (0.4 + 0.9 * l)));
+  const offMs = PERIOD - onMs;
+  let pattern: number | number[];
+  if (offMs < 3) pattern = LENGTH; // full: one solid buzz
+  else { pattern = []; for (let t = 0; t < LENGTH; t += PERIOD) pattern.push(onMs, offMs); }
+  humUntil = now + LENGTH;
   try { navigator.vibrate(pattern); } catch { /* blocked here */ }
 }
 /** The pull let go or cancelled: stop the hum. */
