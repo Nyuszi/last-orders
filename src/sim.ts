@@ -669,6 +669,8 @@ export class Sim {
     for (const g of this.glasses) {
       if (g.role !== 'served' || !g.body) continue;
       const o = this.orders[g.order];
+      // A customer who walked out is gone: their drink can be knocked about, nobody wants it back.
+      if (this.left.has(o.owner)) continue;
       if (Math.hypot(g.body.position.x - o.x, g.body.position.y - o.y) > o.r + SERVE_REACH + 1) {
         o.served = false; o.tip = 0; o.quality = 0; g.role = 'stray';
         this.say(o.owner, 'Hey! I had that!');

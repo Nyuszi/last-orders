@@ -498,3 +498,17 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
   .snd-icon { width: 17px; height: 17px; filter: drop-shadow(1px 1px 0 var(--ink)); }
   .sound { top: 38px; right: 6px; }
 }
+
+/* Tester report: the pours-left count stuck out. Long rows (earned glasses) shrink instead of
+   wrapping, and short landscape screens get a compact side panel so it all fits. */
+.bottles.many { gap: 2px; flex-wrap: nowrap; }
+.bottles.many svg { width: 12px; height: 16px; }
+@media (min-width: 600px) and (min-aspect-ratio: 1/1) {
+  .bottles.many svg { width: 20px; height: 26px; }
+}
+@media (min-width: 600px) and (min-aspect-ratio: 1/1) and (max-height: 480px) {
+  #app { row-gap: 4px; }
+  .controls .keys, .brief .blurb { display: none; }
+  .bottles svg { width: 18px; height: 23px; }
+  .controls { padding: 5px 8px; gap: 6px; }
+}

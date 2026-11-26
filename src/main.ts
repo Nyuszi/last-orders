@@ -580,6 +580,7 @@ function updateHud() {
   // served, star perfect, green plus bonus.
   // Glasses earned by perfect serves join the row at the end.
   const total = level.pours + sim.extraPours;
+  pours.classList.toggle("many", total > 6); // long rows shrink instead of wrapping
   for (let i = 0; i < total; i++) {
     const result = sim.pourResults[i];
     const mark: PourMark = !result ? '' : result === 'perfect' ? 'perfect' : result === 'served' || result === 'trick' ? 'served' : result === 'peanuts' || result === 'cards' ? 'bonus' : 'miss';
