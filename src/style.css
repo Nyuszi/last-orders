@@ -86,11 +86,17 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 }
 .small-label { font-family: var(--head); font-size: 9px; color: var(--muted); }
 .pours { display: flex; flex-direction: column; gap: 3px; }
-.bottles { display: flex; gap: 4px; align-items: center; min-height: 22px; }
-.pours-row { display: flex; align-items: center; gap: 8px; }
+/* Glasses earned by perfect serves make the row longer: let it wrap instead of clipping "N left". */
+.bottles { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 22px; min-width: 0; }
+.pours-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .pours-left { font-family: var(--head); font-size: 12px; color: var(--cream); white-space: nowrap; }
 .pours-left.last { color: var(--danger); }
 .bottles svg { display: block; image-rendering: pixelated; }
+/* A glass earned by a perfect serve: a green glow, and it pops in. */
+.bottles svg.earned { filter: drop-shadow(0 0 2px #9fe07a); }
+.bottles svg.earned.new { animation: earned-pop 0.5s steps(4) 1; }
+@keyframes earned-pop { from { transform: scale(1.6); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .bottles svg.earned.new { animation: none; } }
 .tips { margin: 0; font-family: var(--head); font-size: 13px; font-weight: 700; color: var(--amber); font-variant-numeric: tabular-nums; }
 
 /* Spin: tap the glass where you want to hit it. */

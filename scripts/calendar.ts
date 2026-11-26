@@ -11,15 +11,16 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { cpus } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { candidate, dayIndex, GEN_VERSION, structureProblems } from '../src/generator';
 import { checkOrder, rulesFor } from '../src/fairness';
 import { difference, measureNight, SIGNATURE_TITLE, type NightMetrics } from '../src/metrics';
-import { findSolution, replay } from '../src/solver';
+import { findSolution, hasCombos, replay } from '../src/solver';
 import type { Level } from '../src/levels';
 import type { Shot } from '../src/sim';
 import matterPkg from 'matter-js/package.json' with { type: 'json' };
 
-const DIR = new URL('../calendar/', import.meta.url).pathname;
+const DIR = fileURLToPath(new URL('../calendar/', import.meta.url));
 const PARTS = DIR + 'parts/';
 const DAY = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 /** Share of average players who should clear the night, per weekday [low, high]. */
@@ -56,6 +57,8 @@ function makeDate(date: string, want: number, max: number): Part {
       },
     });
     if (!sol) continue;
+    // Every bonus item must be reachable by a pour that also serves a drink (a combo).
+    if (!hasCombos(level, sol.shots)) continue;
     found.push({ attempt, level, solution: sol.shots, metrics: measureNight(level, sol.shots) });
   }
   return { date, genVersion: GEN_VERSION, tried, candidates: found, ms: Date.now() - t };
@@ -75,7 +78,7 @@ async function build(args: string[]) {
   const runOne = (): Promise<void> => new Promise((resolve) => {
     const date = queue.shift();
     if (!date) return resolve();
-    const child = spawn(process.execPath, [...process.execArgv, new URL(import.meta.url).pathname, 'worker', date, String(want), String(max)], { stdio: ['ignore', 'inherit', 'inherit'] });
+    const child = spawn(process.execPath, [...process.execArgv, fileURLToPath(new URL(import.meta.url)), 'worker', date, String(want), String(max)], { stdio: ['ignore', 'inherit', 'inherit'] });
     child.on('exit', () => {
       done++;
       const eta = ((Date.now() - started) / done) * queue.length / 60000;
@@ -143,8 +146,8 @@ function pack(args: string[]) {
     versions: n.versions.map((v) => ({ level: v.level, solution: v.solution, metrics: { clear: v.metrics.clear, signature: v.metrics.signature }, hash: (v as { hash?: string }).hash })),
   });
   writeFileSync(DIR + 'server.json', JSON.stringify({ from, to, nights: server }));
-  mkdirSync(new URL('../public/', import.meta.url).pathname, { recursive: true });
-  writeFileSync(new URL('../public/nights.json', import.meta.url).pathname, JSON.stringify({ nights: slim }));
+  mkdirSync(fileURLToPath(new URL('../public/', import.meta.url)), { recursive: true });
+  writeFileSync(fileURLToPath(new URL('../public/nights.json', import.meta.url)), JSON.stringify({ nights: slim }));
   const fall = (nights as { fallback?: boolean }[]).filter((n) => n.fallback).length;
   console.log(`Packed ${nights.length} nights (${fall} fall back to a handmade night)${missing.length ? `; ${missing.length} dates not made yet, e.g. ${missing.slice(0, 3).join(', ')}` : ''}`);
 }

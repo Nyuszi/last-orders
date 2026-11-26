@@ -9,6 +9,32 @@ counter into a new obstacle course for the next pour, so the night is one planne
 
 ---
 
+## Changes in v8 (playtest suggestions)
+- **A perfect serve earns a glass.** Stop a drink dead centre and a spare glass joins the row
+  (green glow, "+1 GLASS"). Earned glasses count like any other pour.
+- **Combo: pick up the bonus on the way.** Spending a glass only on the peanuts or the cards felt
+  wasteful, so a pour that earns a bonus and also serves a drink pays an extra 30¢ and the
+  "Combo" badge. A bonus-only pour still counts, but it uses up a glass.
+- **Every bonus can be combo'd.** The generator places the peanut bowl like a pool cut shot: a pour
+  meeting it at a 25-65° cut sends the bowl at Pete's spot and the drink (by the same bounce
+  formula as the physics) within 8° of an order's circle. The calendar only releases a night when
+  the solver finds a combo for each bonus item on it (`findCombo`, aim in 0.25° steps). When no
+  cut-shot spot exists, the bowl goes to its old place below Pete's spot (combos there usually
+  need a bank). Night 2's bowl moved to 205,456: shave its left side (about -96°, any strength
+  from a third up) and the whiskey carries on to the sheriff.
+- **Round hitboxes; the aim line is exact.** Playtest: the line showed a thin cut on the bowl that
+  missed, and its bounce stubs were up to 50° off. Matter.js built circles as 10-13 sided polygons,
+  noticed contacts up to a step (12.5 units) late, and pushed along a polygon face. Now:
+  - round things (drinks, the bowl, cards, the hat, taps) are 40-sided bodies;
+  - a hit between two round things is resolved by hand like a pool break: time is wound back to
+    the moment the true circles touch, both bounce along the line of centres there, and the rest
+    of the step plays forward (`roundHit`);
+  - a graze that happens between two steps still counts (`sweptHits`);
+  - the aim line finds the first touch exactly, draws the ghost glass where the circles touch, and
+    its stubs use the same formula (and the brass cushion's 80% bounce, grip and spin english).
+  Measured: every hit the line shows happens, and the object and drink leave within 0.5° of the
+  stubs (`tests/physics.test.ts`). The line is still straight, so heavy spin curves away from it.
+
 ## Changes in v7
 - **Drinks bounce off each other like pool balls** (same mass, 0.9 bounce, same sliding friction).
   A missed drink stays on the bar as something to bank off. Only a real slam (impact over 7.5) spills.

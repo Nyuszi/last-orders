@@ -2,7 +2,7 @@
 // pour is "robust" (small aiming errors still work), so a human can actually do it.
 // Used by the level tooling and by the daily generator to refuse impossible maps.
 import type { Level } from './levels';
-import { AIR_POUR, KINETIC_POUR, MAX_SPEED, POUR_R, Sim, type Shot } from './sim';
+import { AIR_POUR, KINETIC_POUR, MAX_SPEED, POUR_R, Sim, type Pt, type Shot } from './sim';
 
 const DEG = Math.PI / 180;
 
@@ -18,6 +18,8 @@ export interface SolveOptions {
    */
   accept?: (prefix: Shot[], shot: Shot, orderIndex: number, minTick: number) => Shot | null;
   maxAcceptChecks?: number;
+  /** Pours already played, one per order in turn (e.g. ending in a combo); the search carries on from there. */
+  prefix?: Shot[];
 }
 
 export interface Solution {
@@ -107,6 +109,94 @@ function robustness(level: Level, prefix: Shot[], shot: Shot, orderIndex: number
   return variations.filter((v) => servesOrder(level, prefix, v, orderIndex)).length;
 }
 
+export interface Combo {
+  /** The order the combo pour serves (it replaces solution[order]). */
+  order: number;
+  shot: Shot;
+  /** How many of the 4 near-miss variations are combos too. */
+  robustness: number;
+  /** True when the rest of the stored solution still wins after the combo pour. */
+  finishes: boolean;
+  sims: number;
+}
+
+export type BonusKind = 'peanuts' | 'cards';
+export const BONUS_BADGE: Record<BonusKind, string> = { peanuts: 'Peanuts for Pete', cards: 'Cheat exposed' };
+
+/** The bonus items a night has. */
+export function bonusKinds(level: Level): BonusKind[] {
+  const out: BonusKind[] = [];
+  if (level.bonus && level.bowl) out.push('peanuts');
+  if (level.props.some((p) => p.kind === 'cards')) out.push('cards');
+  return out;
+}
+
+/** Where a bonus item sits before a pour, or null once it's used up. */
+function bonusTarget(sim: Sim, kind: BonusKind): Pt | null {
+  if (sim.badges.has(BONUS_BADGE[kind])) return null;
+  if (kind === 'peanuts') return sim.bowl ? { x: sim.bowl.position.x, y: sim.bowl.position.y } : null;
+  const p = sim.props.find((q) => q.kind === 'cards' && !q.touched && q.body);
+  return p?.body ? { x: p.body.position.x, y: p.body.position.y } : null;
+}
+
+function isCombo(level: Level, prefix: Shot[], shot: Shot, kind: BonusKind, clean = false): boolean {
+  const sim = replay(level, [...prefix, shot]);
+  return sim.badges.has('Combo') && sim.badges.has(BONUS_BADGE[kind]) && sim.status !== 'failed' && sim.left.size === 0 && !(clean && sim.hatWarned);
+}
+
+/**
+ * Looks for one pour that earns this bonus (peanuts or cards) and serves a drink, at any
+ * point of a proven solution. The search aims straight at the bonus item and at its mirror
+ * images behind the side rails, across a fan of angles, strengths and spins.
+ * `from`: the first pour to try. `clean`: the pour must not earn a warning about the sheriff's
+ * hat (for the "Show me how" lessons).
+ */
+export function findCombo(level: Level, solution: Shot[], kind: BonusKind, opts: { robustNeeded?: number; maxSims?: number; from?: number; clean?: boolean } = {}): Combo | null {
+  const robustNeeded = opts.robustNeeded ?? 1;
+  const maxSims = opts.maxSims ?? 90000;
+  const c = level.counter, s = level.start;
+  let sims = 0;
+  let fallback: Combo | null = null;
+  for (let k = opts.from ?? 0; k < solution.length; k++) {
+    const prefix = solution.slice(0, k);
+    const base = replay(level, prefix);
+    if (base.status !== 'aiming') break;
+    const target = bonusTarget(base, kind);
+    if (!target) break;
+    const targets = [target];
+    const waits = level.arm ? [0, 1, 2].map((w) => Math.round((w * level.arm!.period) / 3)) : [0];
+    for (const t of targets) {
+      const aims = [t, { x: 2 * (c.x + POUR_R) - t.x, y: t.y }, { x: 2 * (c.x + c.w - POUR_R) - t.x, y: t.y }];
+      for (const aim of aims) {
+        const a0 = Math.atan2(aim.y - s.y, aim.x - s.x);
+        for (const w of waits) {
+          for (let da = -14; da <= 14; da += 0.25) { // fine: the aim line shows the exact cut, so a narrow combo is fair
+            for (let p = 0.15; p <= 1.0001; p += 0.03) {
+              for (const spin of [0, -0.6, 0.6]) {
+                if (sims++ >= maxSims) return fallback;
+                const shot: Shot = { tick: base.tick + w, angle: a0 + da * DEG, power: Math.min(1, p), spin };
+                if (!isCombo(level, prefix, shot, kind, opts.clean)) continue;
+                const variations: Shot[] = [
+                  { ...shot, angle: shot.angle - 0.6 * DEG }, { ...shot, angle: shot.angle + 0.6 * DEG },
+                  { ...shot, power: Math.max(0.05, shot.power - 0.02) }, { ...shot, power: Math.min(1, shot.power + 0.02) },
+                ];
+                const r = variations.filter((v) => isCombo(level, prefix, v, kind, opts.clean)).length;
+                sims += 4;
+                if (r < robustNeeded) continue;
+                const finishes = replay(level, [...prefix, shot, ...solution.slice(k + 1)]).status === 'won';
+                const combo = { order: k, shot, robustness: r, finishes, sims };
+                if (finishes) return combo;
+                fallback ??= combo;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return fallback && { ...fallback, sims };
+}
+
 /**
  * Greedy search: serve each order in turn with the first robust pour found.
  * Returns null when some order has no robust pour within the budget.
@@ -114,11 +204,11 @@ function robustness(level: Level, prefix: Shot[], shot: Shot, orderIndex: number
 export function findSolution(level: Level, opts: SolveOptions = {}): Solution | null {
   const robustNeeded = opts.robustNeeded ?? 2;
   const maxSims = opts.maxSimsPerOrder ?? 3000;
-  const shots: Shot[] = [];
-  const robust: number[] = [];
+  const shots: Shot[] = [...(opts.prefix ?? [])];
+  const robust: number[] = shots.map(() => 4);
   let sims = 0;
 
-  for (let i = 0; i < level.orders.length; i++) {
+  for (let i = shots.length; i < level.orders.length; i++) {
     const base = replay(level, shots);
     if (base.status !== 'aiming') return null;
     const waits = level.arm ? [0, 1, 2, 3, 4, 5].map((k) => Math.round((k * level.arm!.period) / 6)) : [0];
@@ -153,4 +243,9 @@ export function findSolution(level: Level, opts: SolveOptions = {}): Solution | 
   }
   const final = replay(level, shots);
   return final.status === 'won' ? { shots, robustness: robust, sims } : null;
+}
+
+/** True when every bonus item on the night can be earned by a pour that also serves a drink. */
+export function hasCombos(level: Level, solution: Shot[]): boolean {
+  return bonusKinds(level).every((k) => findCombo(level, solution, k) !== null);
 }

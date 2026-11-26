@@ -19,18 +19,18 @@ export const SOLUTIONS: Record<string, Shot[]> = {
   "n2": [
     {
       "tick": 0,
-      "angle": -1.720084,
-      "power": 0.228672,
-      "spin": 0
+      "angle": -1.687341,
+      "power": 0.42,
+      "spin": 0.6
     },
     {
-      "tick": 92,
+      "tick": 82,
       "angle": -1.47732,
       "power": 0.393825,
       "spin": 0
     },
     {
-      "tick": 208,
+      "tick": 198,
       "angle": -1.647401,
       "power": 0.433257,
       "spin": 0
@@ -38,21 +38,21 @@ export const SOLUTIONS: Record<string, Shot[]> = {
   ],
   "n3": [
     {
-      "tick": 0,
-      "angle": -1.216394,
-      "power": 0.095819,
-      "spin": 0
+      "tick": 100,
+      "angle": -1.630364,
+      "power": 0.72,
+      "spin": -0.6
     },
     {
-      "tick": 63,
-      "angle": -1.723907,
-      "power": 0.637143,
-      "spin": 0
+      "tick": 192,
+      "angle": -1.953148,
+      "power": 0.75,
+      "spin": 0.6
     },
     {
-      "tick": 151,
-      "angle": -1.405629,
-      "power": 0.464957,
+      "tick": 326,
+      "angle": -1.492895,
+      "power": 0.451414,
       "spin": 0
     }
   ]

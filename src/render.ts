@@ -3,7 +3,7 @@
 // every pixel stays square. Text is drawn on top at full resolution in a pixel font.
 import type { Drink, Level, NpcId, Side } from './levels';
 import { NPCS } from './levels';
-import { BOWL_R, GLASS_R, POUR_R, PROP_R, pointInPoly, type Sim, type SimEvent } from './sim';
+import { BOWL_R, CUSHION, DRINK_MASS, ENGLISH, GLASS_BOUNCE, GLASS_R, POUR_R, PROP_R, pointInPoly, type Sim, type SimEvent } from './sim';
 import {
   ACE, BOWL, BOWL_PAL, CARDS, GLASS, GLASS_BEER, GLASS_TIPPED, HAT, HAT_PAL, ITEM_PAL, NPC_PAL, NPC_SPRITES,
   PETE_DROP, PETE_LEAN, PETE_SLIP, TAP, TAP_PAL, TIPJAR, glassPal, rotateCCW, rotateCW, type SpriteMap,
@@ -20,8 +20,8 @@ const PETE_POSES = {
 const SHARD_DIRS: [number, number][] = [[-1, -0.4], [0.9, -0.6], [1, 0.5], [-0.7, 0.7], [0.2, -1]];
 /** Customers are drawn at double pixel size, so they read clearly next to the bar. */
 const NPC_SCALE = 2;
-/** Mass of a drink glass in the physics (density 0.003, radius 9). */
-const DRINK_MASS = 0.003 * Math.PI * 81;
+/** The aim line ignores a graze thinner than this (units): too thin to see, and rounding can miss it. */
+const GRAZE = 0.05;
 /** How many art pixels a customer's centre sits from the rail. */
 const NPC_INSET = 15;
 /** Colours sampled from Pete's sprite (npc-pete-drop.png), for the arm that slides across the bar. */
@@ -106,7 +106,7 @@ interface Crash { x: number; y: number; t: number; drink: string }
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string }
 interface Bubble { npc: NpcId; text: string; life: number }
 interface Float { x: number; y: number; text: string; life: number; color: string }
-export interface Aim { angle: number; power: number }
+export interface Aim { angle: number; power: number; spin?: number }
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -379,6 +379,14 @@ export class Renderer {
         this.burst(ev.x, ev.y, PAL.amber, 18, 1.6);
         this.floats.push({ x: ev.x, y: ev.y - 12, text: 'BONUS', life: 70, color: PAL.amber });
         if (ev.kind === 'peanuts') this.setMood('pete', 'happy');
+        break;
+      case 'extra':
+        // Below the PERFECT tip, so the two don't overlap.
+        this.floats.push({ x: ev.x, y: ev.y + 4, text: '+1 GLASS', life: 80, color: '#9fe07a' });
+        break;
+      case 'combo':
+        this.burst(ev.x, ev.y, PAL.brassLight, 14, 1.8);
+        this.floats.push({ x: ev.x, y: ev.y - 28, text: `COMBO +${ev.tip}c`, life: 80, color: PAL.amber });
         break;
       default:
         break;
@@ -1131,16 +1139,34 @@ export class Renderer {
     const dx = Math.cos(aim.angle), dy = Math.sin(aim.angle);
     // Mass is relative to a drink (1). The bowl is about 2.4 drinks, so a straight hit sends your drink back.
     const obstacles: { x: number; y: number; r: number; fixed: boolean; mass: number }[] = [];
-    for (const gl of sim.glasses) if (gl.body) obstacles.push({ x: gl.body.position.x, y: gl.body.position.y, r: GLASS_R, fixed: false, mass: 1 });
+    // A glass you poured keeps the pour's size (9); one that was already standing is 8.
+    const radius = (b: { circleRadius?: number }, r: number) => b.circleRadius ?? r;
+    for (const gl of sim.glasses) if (gl.body) obstacles.push({ x: gl.body.position.x, y: gl.body.position.y, r: radius(gl.body, GLASS_R), fixed: false, mass: gl.body.mass / DRINK_MASS });
     for (const p of sim.props) if (p.body) obstacles.push({ x: p.body.position.x, y: p.body.position.y, r: PROP_R[p.kind], fixed: false, mass: p.body.mass / DRINK_MASS });
     for (const p of L.posts) obstacles.push({ x: p.x, y: p.y, r: p.r, fixed: true, mass: Infinity });
     if (sim.bowl) obstacles.push({ x: sim.bowl.position.x, y: sim.bowl.position.y, r: BOWL_R, fixed: false, mass: sim.bowl.mass / DRINK_MASS });
     const railAt = (side: Side, pos: number) => L.rails.find((r) => r.side === side && pos >= r.from && pos <= r.to);
+    // The first thing the drink touches, worked out exactly: the physics treats round things as
+    // true circles and counts every touch, even a graze between two steps (sim.ts sweptHits),
+    // so the line can show the thinnest cut. Distance along the line to where the circles touch.
+    let hit: (typeof obstacles)[number] | null = null, hitAt = Infinity;
+    for (const o of obstacles) {
+      const R = o.r + POUR_R;
+      const along = (o.x - L.start.x) * dx + (o.y - L.start.y) * dy;
+      const across = (o.x - L.start.x) * -dy + (o.y - L.start.y) * dx;
+      // A graze thinner than this (a thousandth of a drink) is rounding noise in the physics.
+      if (Math.abs(across) >= R - GRAZE || along <= 0) continue;
+      const t = along - Math.sqrt(R * R - across * across);
+      if (t > 0 && t < hitAt) { hit = o; hitAt = t; }
+    }
     let end: { kind: 'object'; ox: number; oy: number; fixed: boolean; mass: number } | { kind: 'rail'; type: 'brass' | 'timber'; side: Side } | { kind: 'off' } | { kind: 'far' } = { kind: 'far' };
     for (let travelled = 0; travelled < 760; travelled += 1.5) {
+      if (hit && travelled + 1.5 >= hitAt) {
+        x = L.start.x + dx * hitAt; y = L.start.y + dy * hitAt;
+        end = { kind: 'object', ox: hit.x, oy: hit.y, fixed: hit.fixed, mass: hit.mass };
+        break;
+      }
       x += dx * 1.5; y += dy * 1.5;
-      const hit = obstacles.find((o) => Math.hypot(o.x - x, o.y - y) < o.r + POUR_R);
-      if (hit) { end = { kind: 'object', ox: hit.x, oy: hit.y, fixed: hit.fixed, mass: hit.mass }; break; }
       let side: Side | null = null;
       if (x < c.x + POUR_R) side = 'left';
       else if (x > c.x + c.w - POUR_R) side = 'right';
@@ -1159,10 +1185,17 @@ export class Renderer {
     if (end.kind === 'rail') {
       ghost(ex, ey, PAL.cream);
       if (end.type === 'brass') {
-        // Mirror bounce, a short stub only.
-        const bx = end.side === 'left' || end.side === 'right' ? -dx : dx;
-        const by = end.side === 'top' || end.side === 'bottom' ? -dy : dy;
-        this.line(ex, ey, ex + bx * 16, ey + by * 16, PAL.brassLight, 2, phase);
+        // The cushion as the physics does it (sim.ts cushion): it keeps 80% of the speed into
+        // the rail, a little grip along it, and side spin widens or narrows the bounce.
+        const n = { left: [1, 0], right: [-1, 0], top: [0, 1], bottom: [0, -1] }[end.side];
+        const tx = -n[1], ty = n[0];
+        const vn = dx * n[0] + dy * n[1];
+        let vt = (dx * tx + dy * ty) * CUSHION.brass.grip;
+        const spin = aim.spin ?? 0;
+        if (spin) vt += (Math.sign(-dy * tx + dx * ty) || 1) * spin * ENGLISH * -vn;
+        const bx = n[0] * -vn * CUSHION.brass.e + tx * vt, by = n[1] * -vn * CUSHION.brass.e + ty * vt;
+        const bl = Math.hypot(bx, by) || 1;
+        this.line(ex, ey, ex + (bx / bl) * 16, ey + (by / bl) * 16, PAL.brassLight, 2, phase);
       } else {
         this.rect(ex - 2, ey - 2, 1, 1, '#cdb894'); this.rect(ex + 2, ey + 2, 1, 1, '#cdb894');
       }
@@ -1173,10 +1206,11 @@ export class Renderer {
       const nl = Math.hypot(nx, ny) || 1;
       const ux = nx / nl, uy = ny / nl;
       if (end.fixed) {
-        // A tap or tip jar doesn't move: your drink bounces off it like off a rail.
+        // A tap or tip jar doesn't move: your drink bounces off it, keeping 90% of the speed into it.
         const dot = dx * ux + dy * uy;
-        const rx = dx - 2 * dot * ux, ry = dy - 2 * dot * uy;
-        this.line(ex, ey, ex + rx * 16, ey + ry * 16, PAL.brassLight, 2, phase);
+        const rx = dx - (1 + GLASS_BOUNCE) * dot * ux, ry = dy - (1 + GLASS_BOUNCE) * dot * uy;
+        const rl = Math.hypot(rx, ry) || 1;
+        this.line(ex, ey, ex + (rx / rl) * 16, ey + (ry / rl) * 16, PAL.brassLight, 2, phase);
       } else {
         // Like pool: the thing you hit heads along the line of centres (amber). Your drink
         // keeps its sideways part and loses (or, off something heavier, reverses) the part
@@ -1185,7 +1219,7 @@ export class Renderer {
         this.line(ox, oy, ox + ux * 18, oy + uy * 18, PAL.amber, 2, phase);
         const vn = dx * ux + dy * uy;
         const tx = dx - vn * ux, ty = dy - vn * uy;
-        const after = (1 - 0.9 * end.mass) / (1 + end.mass);
+        const after = (1 - GLASS_BOUNCE * end.mass) / (1 + end.mass);
         const ax = tx + ux * vn * after, ay = ty + uy * vn * after;
         const sp = Math.hypot(ax, ay);
         if (sp > 0.12) this.line(ex, ey, ex + (ax / sp) * (8 + 16 * sp), ey + (ay / sp) * (8 + 16 * sp), PAL.cream, 2, phase);

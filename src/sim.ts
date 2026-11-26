@@ -20,15 +20,17 @@ export const STEP_MS = 1000 / 60;
 export const AIR_POUR = 0.0015;
 export const KINETIC_POUR = 0.0659;
 const RAIL_T = 14;
+/** Extra tip when one pour earns the bonus and serves a drink. */
+export const COMBO_TIP = 30;
 // Drinks behave like pool balls: they bounce off each other and slide, so a missed drink
 // becomes something to bank off or to knock into its circle later. Only a real slam spills.
 const SPILL_IMPACT = 7.5;
-const GLASS_BOUNCE = 0.9;
+export const GLASS_BOUNCE = 0.9;
 // Like side spin in pool: a slight curve on the wood, and most of the effect at the rail.
 const SPIN_RATE = 0.006;
-const ENGLISH = 0.35; // extra sideways speed off a brass rail, per unit of spin
+export const ENGLISH = 0.35; // extra sideways speed off a brass rail, per unit of spin
 /** Cushions: share of speed into the rail that comes back out, and the grip along it. */
-const CUSHION = { brass: { e: 0.8, grip: 0.96 }, timber: { e: 0.12, grip: 0.7 } };
+export const CUSHION = { brass: { e: 0.8, grip: 0.96 }, timber: { e: 0.12, grip: 0.7 } };
 
 const AIR = { pour: AIR_POUR, glass: 0.07, bowl: 0.02, prop: 0.09 };
 // Sliding friction: a fixed loss of speed per step, so things come to a clean stop.
@@ -38,6 +40,22 @@ export const PUDDLE_FRICTION: Record<Drink, number> = { beer: 0.3, rye: 0.35, wh
 const PUDDLE_RADIUS: Record<Drink, number> = { beer: 46, rye: 40, whiskey: 54, sarsaparilla: 36, water: 36 };
 
 export interface Pt { x: number; y: number }
+
+/**
+ * Round hitboxes. Matter.js builds a circle as a polygon with as many sides as its radius
+ * (10-13 here), so glancing hits pushed along a face, not the line of centres, and the aim line
+ * couldn't predict them. Round things are 40-sided instead: within 0.3% of a true circle.
+ */
+export const ROUND_SIDES = 40;
+function roundBody(x: number, y: number, r: number, options: Matter.IChamferableBodyDefinition): Matter.Body {
+  return Bodies.polygon(x, y, ROUND_SIDES, r, { ...options, circleRadius: r } as Matter.IChamferableBodyDefinition);
+}
+/** Mass of a round body as the physics has it (density times the 40-gon's area). */
+export function roundMass(density: number, r: number): number {
+  return density * (ROUND_SIDES / 2) * r * r * Math.sin((2 * Math.PI) / ROUND_SIDES);
+}
+/** Mass of a poured drink, the unit the aim line and the generator measure masses in. */
+export const DRINK_MASS = roundMass(0.003, POUR_R);
 
 /** Launch speed (units per step) for a pour power from 0 to 1. */
 export function launchSpeed(power: number): number {
@@ -71,6 +89,10 @@ export type SimEvent =
   | { t: 'thud'; x: number; y: number }
   | { t: 'served'; x: number; y: number; quality: number; tip: number; owner: NpcId; trick: boolean }
   | { t: 'bonus'; kind: 'peanuts' | 'cards'; x: number; y: number }
+  /** A perfect serve earned a spare glass. */
+  | { t: 'extra'; x: number; y: number }
+  /** The same pour earned the bonus and served a drink. */
+  | { t: 'combo'; x: number; y: number; tip: number }
   | { t: 'slam'; x: number; y: number }
   | { t: 'settled' };
 
@@ -82,7 +104,8 @@ type Tag =
   | { kind: 'prop'; prop: Prop }
   | { kind: 'bowl' };
 
-interface QueuedHit { a: Matter.Body; b: Matter.Body; va: Pt; vb: Pt; n: Pt }
+/** A contact the engine found this step: bodies, and their positions and velocities before it resolved it. */
+interface QueuedHit { a: Matter.Body; b: Matter.Body; va: Pt; vb: Pt; pa: Pt; pb: Pt; n: Pt }
 
 export class Sim {
   readonly level: Level;
@@ -106,6 +129,8 @@ export class Sim {
   events: SimEvent[] = [];
   /** What happened to each pour, for the share card: 'served' | 'perfect' | 'miss' | 'spill' | 'smash'. */
   pourResults: string[] = [];
+  /** Spare glasses earned by perfect serves, on top of the night's pours. */
+  extraPours = 0;
   /** A bonus (peanuts, cards) earned by the pour now rolling, so it isn't recorded as a miss. */
   private bonusThisPour: '' | 'peanuts' | 'cards' = '';
 
@@ -136,7 +161,7 @@ export class Sim {
     }
 
     for (const p of level.posts) {
-      this.add(Bodies.circle(p.x, p.y, p.r, { isStatic: true, restitution: 0.75, friction: 0 }), { kind: 'post' });
+      this.add(roundBody(p.x, p.y, p.r, { isStatic: true, restitution: 0.75, friction: 0 }), { kind: 'post' });
     }
 
     this.orders = level.orders.map((o) => ({ ...o, served: false, quality: 0, tip: 0, cancelled: false }));
@@ -145,13 +170,13 @@ export class Sim {
 
     this.props = level.props.map((p) => {
       const prop: Prop = { ...p, body: null, touched: false, wet: false };
-      prop.body = Bodies.circle(p.x, p.y, PROP_R[p.kind], { density: 0.0015, frictionAir: AIR.prop, restitution: 0.1, friction: 0.05 });
+      prop.body = roundBody(p.x, p.y, PROP_R[p.kind], { density: 0.0015, frictionAir: AIR.prop, restitution: 0.1, friction: 0.05 });
       this.add(prop.body, { kind: 'prop', prop });
       return prop;
     });
 
     if (level.bowl) {
-      this.bowl = Bodies.circle(level.bowl.x, level.bowl.y, BOWL_R, { density: 0.0035, frictionAir: AIR.bowl, restitution: 0.25, friction: 0.02 });
+      this.bowl = roundBody(level.bowl.x, level.bowl.y, BOWL_R, { density: 0.0035, frictionAir: AIR.bowl, restitution: 0.25, friction: 0.02 });
       this.add(this.bowl, { kind: 'bowl' });
     }
 
@@ -172,7 +197,7 @@ export class Sim {
     Events.on(this.engine, 'collisionStart', (ev) => {
       for (const pair of ev.pairs) {
         const a = pair.bodyA, b = pair.bodyB;
-        this.hits.push({ a, b, va: { ...a.velocity }, vb: { ...b.velocity }, n: { ...pair.collision.normal } });
+        this.hits.push({ a, b, va: { ...a.velocity }, vb: { ...b.velocity }, pa: { ...a.position }, pb: { ...b.position }, n: { ...pair.collision.normal } });
       }
     });
   }
@@ -190,7 +215,7 @@ export class Sim {
   private standGlass(id: string, drink: Drink, owner: NpcId | null, role: Glass['role'], order: number, x: number, y: number): Glass {
     const glass: Glass = { id, drink, owner, role, order, body: null, tipped: false, tipAngle: 0, tipX: x, tipY: y, floor: false };
     // Same mass as a poured drink, so hits transfer speed the way pool balls do.
-    glass.body = Bodies.circle(x, y, GLASS_R, { density: 0.003 * (POUR_R / GLASS_R) ** 2, frictionAir: AIR.pour, restitution: GLASS_BOUNCE, friction: 0.01 });
+    glass.body = roundBody(x, y, GLASS_R, { density: 0.003 * (POUR_R / GLASS_R) ** 2, frictionAir: AIR.pour, restitution: GLASS_BOUNCE, friction: 0.01 });
     this.add(glass.body, { kind: 'glass', glass });
     this.glasses.push(glass);
     return glass;
@@ -210,7 +235,7 @@ export class Sim {
   }
 
   get poursLeft(): number {
-    return this.level.pours - this.shots.length;
+    return this.level.pours + this.extraPours - this.shots.length;
   }
 
   /** The next order to pour, or -1 when everything is served. */
@@ -239,7 +264,7 @@ export class Sim {
     const o = this.orders[oi];
     const s = this.level.start;
     const glass: Glass = { id: `pour-${++this.seq}`, drink: o.drink, owner: o.owner, role: 'pour', order: oi, body: null, tipped: false, tipAngle: 0, tipX: s.x, tipY: s.y, floor: false };
-    glass.body = Bodies.circle(s.x, s.y, POUR_R, { density: 0.003, frictionAir: AIR.pour, restitution: GLASS_BOUNCE, friction: 0.01 });
+    glass.body = roundBody(s.x, s.y, POUR_R, { density: 0.003, frictionAir: AIR.pour, restitution: GLASS_BOUNCE, friction: 0.01 });
     (glass.body as Matter.Body & { spin?: number }).spin = spin;
     this.add(glass.body, { kind: 'glass', glass });
     this.glasses.push(glass);
@@ -338,16 +363,95 @@ export class Sim {
   private processHits() {
     const hits = this.hits;
     this.hits = [];
+    hits.push(...this.sweptHits(hits));
     for (const h of hits) {
       const ta = this.tags.get(h.a.id), tb = this.tags.get(h.b.id);
       if (!ta || !tb) continue;
+      // Round on round (drinks, the bowl, props, posts) is resolved as true circles.
+      const n = this.roundHit(h) ?? h.n;
       const rel = { x: h.va.x - h.vb.x, y: h.va.y - h.vb.y };
-      const impact = Math.abs(rel.x * h.n.x + rel.y * h.n.y);
+      const impact = Math.abs(rel.x * n.x + rel.y * n.y);
       this.handleHit(h.a, ta, h.b, tb, impact, h.vb, h.va);
       this.handleHit(h.b, tb, h.a, ta, impact, h.va, h.vb);
       if (ta.kind === 'rail' && !h.b.isStatic) this.cushion(h.b, tb, ta, h.vb);
       else if (tb.kind === 'rail' && !h.a.isStatic) this.cushion(h.a, ta, tb, h.va);
     }
+  }
+
+  /**
+   * Hits the engine missed: a drink moves up to 12.5 units a step, so it can graze something
+   * between two steps without the two ever overlapping at a step's end. Any two round things
+   * whose true circles touched during the step (and weren't touching at its start) count as
+   * a hit, so the aim line can promise thin cuts exactly.
+   */
+  private sweptHits(found: QueuedHit[]): QueuedHit[] {
+    const key = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
+    const seen = new Set(found.map((h) => key(h.a.id, h.b.id)));
+    const round = Composite.allBodies(this.engine.world).filter((b) => (b as Matter.Body & { circleRadius?: number }).circleRadius && this.tags.has(b.id));
+    const out: QueuedHit[] = [];
+    const still = { x: 0, y: 0 };
+    for (let i = 0; i < round.length; i++) {
+      for (let j = i + 1; j < round.length; j++) {
+        const a = round[i], b = round[j];
+        if ((a.isStatic || a.speed < 0.05) && (b.isStatic || b.speed < 0.05)) continue;
+        if (seen.has(key(a.id, b.id))) continue;
+        const R = (a as Matter.Body & { circleRadius: number }).circleRadius + (b as Matter.Body & { circleRadius: number }).circleRadius;
+        const va = a.isStatic ? still : a.velocity, vb = b.isStatic ? still : b.velocity;
+        const d0 = { x: a.position.x - va.x - (b.position.x - vb.x), y: a.position.y - va.y - (b.position.y - vb.y) };
+        const dd = d0.x * d0.x + d0.y * d0.y;
+        if (dd < R * R) continue; // already touching when the step began
+        const w = { x: va.x - vb.x, y: va.y - vb.y };
+        const A = w.x * w.x + w.y * w.y, B = 2 * (d0.x * w.x + d0.y * w.y), disc = B * B - 4 * A * (dd - R * R);
+        if (A < 1e-9 || disc < 0) continue;
+        const t = (-B - Math.sqrt(disc)) / (2 * A);
+        if (t < 0 || t > 1) continue;
+        out.push({ a, b, va: { ...va }, vb: { ...vb }, pa: { ...a.position }, pb: { ...b.position }, n: { x: 0, y: 0 } });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Two round things hitting, done by hand like a pool break rather than by the engine.
+   * The engine only notices a contact once the shapes overlap, up to a whole step (12.5
+   * units) late, and pushes along a polygon face, so bounces came out up to 20 degrees off
+   * the aim line's prediction. Here time is wound back to the moment the true circles touch, both bounce
+   * along the line of centres there (same formula as the aim line), and the rest of the step
+   * is played forward. Returns the contact normal, or null when this isn't a round pair.
+   */
+  private roundHit(h: QueuedHit): Pt | null {
+    const ra = (h.a as Matter.Body & { circleRadius?: number }).circleRadius;
+    const rb = (h.b as Matter.Body & { circleRadius?: number }).circleRadius;
+    if (!ra || !rb || (h.a.isStatic && h.b.isStatic)) return null;
+    const R = ra + rb;
+    const d0 = { x: h.pa.x - h.pb.x, y: h.pa.y - h.pb.y };
+    const w = { x: h.va.x - h.vb.x, y: h.va.y - h.vb.y };
+    // How far back (in steps) the circles first touched: |d0 - w s| = R. A swept hit (below)
+    // ends the step already apart again, and this finds its touch the same way.
+    let s = 0;
+    const ww = w.x * w.x + w.y * w.y, dw = d0.x * w.x + d0.y * w.y, dd = d0.x * d0.x + d0.y * d0.y;
+    const disc = dw * dw - ww * (dd - R * R);
+    if (ww > 1e-9 && disc >= 0) s = Math.min(1, Math.max(0, (dw + Math.sqrt(disc)) / ww));
+    const cx = d0.x - w.x * s, cy = d0.y - w.y * s;
+    const len = Math.hypot(cx, cy) || 1;
+    const n = { x: cx / len, y: cy / len }; // from b to a
+    const vn = w.x * n.x + w.y * n.y;
+    if (vn >= 0) return n; // already parting
+    const e = Math.max(h.a.restitution, h.b.restitution); // as the engine does
+    const ia = h.a.isStatic ? 0 : 1 / h.a.mass, ib = h.b.isStatic ? 0 : 1 / h.b.mass;
+    const j = (-(1 + e) * vn) / (ia + ib);
+    const va = { x: h.va.x + j * ia * n.x, y: h.va.y + j * ia * n.y };
+    const vb = { x: h.vb.x - j * ib * n.x, y: h.vb.y - j * ib * n.y };
+    // Back to the moment of touch, then on for the rest of the step with the new velocities.
+    const move = (body: Matter.Body, p: Pt, v0: Pt, v1: Pt) => {
+      if (body.isStatic) return;
+      Body.setPosition(body, { x: p.x - v0.x * s + v1.x * s, y: p.y - v0.y * s + v1.y * s });
+      Body.setVelocity(body, v1);
+      Body.setAngularVelocity(body, 0);
+    };
+    move(h.a, h.pa, h.va, va);
+    move(h.b, h.pb, h.vb, vb);
+    return n;
   }
 
   /**
@@ -532,7 +636,8 @@ export class Sim {
     for (const p of this.props) {
       if (p.body && this.offBar(p.body.position.x, p.body.position.y)) {
         this.touchProp(p);
-        this.remove(p.body);
+        // The sheriff may already have taken his hat with him when he walked out.
+        if (p.body) this.remove(p.body);
         p.body = null;
       }
     }
@@ -570,6 +675,7 @@ export class Sim {
       }
     }
     let trickThisPour = false;
+    const servedNow: number[] = [];
     // Any drink now resting in its own customer's circle is served, including an old miss
     // that got knocked in (a trick shot).
     for (let i = 0; i < this.orders.length; i++) {
@@ -594,6 +700,12 @@ export class Sim {
       // A plain serve shows the customer's happy portrait instead of a speech bubble (main.ts).
       if (trick) this.say(o.owner, 'Well, I\'ll be!');
       this.events.push({ t: 'served', x: o.x, y: o.y, quality, tip: o.tip, owner: o.owner, trick });
+      servedNow.push(i);
+      // A perfect serve earns a spare glass.
+      if (quality === 3) {
+        this.extraPours++;
+        this.events.push({ t: 'extra', x: o.x, y: o.y });
+      }
     }
     // Peanuts first, so a pour that only pushes the bowl into Pete's spot counts as a bonus
     // pour, not a miss.
@@ -605,6 +717,14 @@ export class Sim {
         this.say('pete', NPCS.pete.lines.bonus);
         this.events.push({ t: 'bonus', kind: 'peanuts', x: bonus.x, y: bonus.y });
       }
+    }
+    // Combo: the pour that earned the bonus also served a drink. The bonus is meant to be
+    // picked up on the way to a customer, not by spending a glass on it.
+    if (this.bonusThisPour && servedNow.length) {
+      const o = this.orders[servedNow[servedNow.length - 1]];
+      o.tip += COMBO_TIP;
+      this.badges.add('Combo');
+      this.events.push({ t: 'combo', x: o.x, y: o.y, tip: COMBO_TIP });
     }
     if (pour) {
       if (pour.tipped) this.pourResults.push(pour.floor ? 'smash' : 'spill');

@@ -546,6 +546,8 @@ function pixelGlass(fill: string, mark: PourMark = '') {
   return `<svg width="20" height="26" viewBox="0 0 10 13" shape-rendering="crispEdges" aria-hidden="true">${s}</svg>`;
 }
 
+/** How many earned glasses the HUD has already shown, so only a new one plays its pop. */
+let earnedShown = 0;
 function updateHud() {
   const level: Level = sim.level;
   const chips = $('chips');
@@ -576,13 +578,21 @@ function updateHud() {
   pours.innerHTML = '';
   // Pours left are all the same full glass; used ones get a stamp: red X miss/spill, gold tick
   // served, star perfect, green plus bonus.
-  for (let i = 0; i < level.pours; i++) {
+  // Glasses earned by perfect serves join the row at the end.
+  const total = level.pours + sim.extraPours;
+  for (let i = 0; i < total; i++) {
     const result = sim.pourResults[i];
     const mark: PourMark = !result ? '' : result === 'perfect' ? 'perfect' : result === 'served' || result === 'trick' ? 'served' : result === 'peanuts' || result === 'cards' ? 'bonus' : 'miss';
     const fill = !result ? '#f2b53a' : '#3a2a20'; // used glasses are emptied, so the stamp stands out
     pours.insertAdjacentHTML('beforeend', pixelGlass(fill, mark));
+    if (i >= level.pours) {
+      const g = pours.lastElementChild as SVGElement;
+      g.classList.add('earned');
+      if (i - level.pours >= earnedShown) g.classList.add('new'); // only a glass earned just now pops in
+    }
   }
-  pours.setAttribute('aria-label', `${sim.poursLeft} of ${level.pours} pours left`);
+  earnedShown = sim.extraPours;
+  pours.setAttribute('aria-label', `${sim.poursLeft} of ${total} pours left`);
   // The count, in words: the glasses alone (gold served, red missed, coloured = next, dark = unused) were unclear.
   $('pours-left').textContent = `${sim.poursLeft} left`;
   $('pours-left').classList.toggle('last', sim.poursLeft === 1);
@@ -983,7 +993,7 @@ function updatePoolControls(dt: number, now: number) {
   if (turning) { aimAngle = clampAngle(aimAngle + turning * TURN_SPEED * (fine ? 0.25 : 1) * (dt / 1000)); aimTick(); }
   if (charging?.by === 'space') { charge = Math.min(1, (now - charging.started) / CHARGE_MS); pullTick(); showPower(charge, false); }
   // The guideline is always up while you can pour; the bartender's hand pulls back with the tap.
-  if (!lesson) aim = canShoot() ? { angle: aimAngle, power: charging ? charge : 0 } : null;
+  if (!lesson) aim = canShoot() ? { angle: aimAngle, power: charging ? charge : 0, spin } : null;
 }
 
 /** When the last pour stopped just outside its circle, says which way it was off. */
@@ -1133,6 +1143,7 @@ const EVENT_SFX: Partial<Record<SimEvent['t'], SfxId>> = {
 function playEvent(ev: SimEvent) {
   if (ev.t === 'served') sfx(ev.trick ? 'trick' : ev.quality === 3 ? 'perfect' : 'serve');
   else if (ev.t === 'bonus') sfx(ev.kind === 'peanuts' ? 'peanuts' : 'cards');
+  else if (ev.t === 'combo') sfx('trick');
   else { const id = EVENT_SFX[ev.t]; if (id) sfx(id); }
 }
 function onStatusChange(prev: Status) {
@@ -1214,7 +1225,7 @@ function frame(now: number) {
   if (lesson) {
     const shot = replayShots[lesson.shot];
     const t = now - lesson.started;
-    aim = { angle: shot.angle, power: shot.power * Math.min(1, t / LESSON_PULL_MS) };
+    aim = { angle: shot.angle, power: shot.power * Math.min(1, t / LESSON_PULL_MS), spin: shot.spin };
     showPower(aim.power, false);
     if (t >= LESSON_PULL_MS + LESSON_HOLD_MS) {
       aim = null;

@@ -124,7 +124,7 @@ export const LEVELS: Level[] = [
     glasses: [{ id: 'pete-water', x: 242, y: 404, drink: 'water', owner: 'pete' }],
     props: [{ id: 'sheriff-hat', kind: 'hat', owner: 'sheriff', x: 146, y: 264 }],
     posts: [{ x: 195, y: 250, r: 11, kind: 'tap' }],
-    bowl: { x: 228, y: 492 },
+    bowl: { x: 205, y: 456 }, // shave its left side: it rolls into Pete's spot and the whiskey carries on to the sheriff (a combo)
     bonus: { x: 242, y: 440, r: 18 },
     puddles: [{ drink: 'sarsaparilla', x: 200, y: 180, r: 27 }],
   },

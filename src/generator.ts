@@ -4,8 +4,8 @@
 // tried, and if none pass, a handmade night (proven by tests) is used instead.
 import { LEVELS, type Drink, type GlassDef, type Level, type NpcDef, type NpcId, type OrderDef, type PropDef, type PostDef, type PuddleDef, type RailSeg, type ArmDef } from './levels';
 import { makeRng, type Rng } from './rng';
-import { findSolution, type Solution } from './solver';
-import type { Shot } from './sim';
+import { findSolution, hasCombos, type Solution } from './solver';
+import { BOWL_R, DRINK_MASS, roundMass, type Shot } from './sim';
 
 export const COUNTER = { x: 125, y: 20, w: 140, h: 570 };
 export const START = { x: 195, y: 550 };
@@ -46,7 +46,7 @@ const WEEK: number[] = [0, 1, 1, 2, 2, 3, 2];
  * Bump this whenever a change would alter the map produced for any date. Maps already handed
  * to players are stored with their version and never regenerated.
  */
-export const GEN_VERSION = 2;
+export const GEN_VERSION = 3;
 
 interface Circle { x: number; y: number; r: number }
 
@@ -66,6 +66,48 @@ function place(rng: Rng, taken: Circle[], r: number, make: () => { x: number; y:
   }
   return null;
 }
+
+/**
+ * The peanut bowl goes where one pour can push it into Pete's spot and carry on into an
+ * order's circle (a combo). Like a pool cut shot: the bowl leaves along the line of centres,
+ * and the drink keeps its sideways speed and, off the heavier bowl, bounces back a little
+ * along that line (the same formula as the aim line and the physics). So the bowl goes where a
+ * pour meeting it at a 25-65 degree cut sends the bowl at the spot and the drink within 8
+ * degrees of an order's circle. The calendar still proves the combo with the solver (findCombo).
+ */
+function placeBowl(rng: Rng, taken: Circle[], spot: Circle, orders: OrderDef[]): Circle | null {
+  const BOWL = 13, POUR = 9;
+  const targets = orders.filter((o) => Math.hypot(o.x - spot.x, o.y - spot.y) > 70);
+  if (!targets.length) return null;
+  const unit = (x: number, y: number) => { const l = Math.hypot(x, y) || 1; return { x: x / l, y: y / l }; };
+  const sources = [START, { x: 2 * (COUNTER.x + POUR) - START.x, y: START.y }, { x: 2 * (COUNTER.x + COUNTER.w - POUR) - START.x, y: START.y }];
+  return place(rng, taken, BOWL, () => {
+    for (let i = 0; i < 400; i++) {
+      const o = rng.pick(targets);
+      const b = { x: rng.range(165, 225), y: rng.range(110, 480) };
+      const toSpot = Math.hypot(spot.x - b.x, spot.y - b.y), toOrder = Math.hypot(o.x - b.x, o.y - b.y);
+      if (toSpot < 50 || toSpot > 150 || toOrder < 45 || toOrder > 190) continue;
+      const u = unit(spot.x - b.x, spot.y - b.y), w = unit(o.x - b.x, o.y - b.y);
+      const contact = { x: b.x - u.x * (BOWL + POUR), y: b.y - u.y * (BOWL + POUR) };
+      // Straight from the start, or off one side rail (aimed at the start's mirror image).
+      const ok = sources.some((s) => {
+        const d = unit(contact.x - s.x, contact.y - s.y);
+        const vn = d.x * u.x + d.y * u.y;
+        const cut = Math.acos(vn) / DEG;
+        if (cut < 25 || cut > 65) return false;
+        // Where the drink goes after the hit (sim.ts roundHit).
+        const out = unit(d.x - vn * u.x + u.x * vn * BOUNCE_BACK, d.y - vn * u.y + u.y * vn * BOUNCE_BACK);
+        return Math.acos(Math.min(1, out.x * w.x + out.y * w.y)) / DEG <= 8;
+      });
+      if (ok) return b;
+    }
+    return { x: -999, y: -999 }; // off the counter, so place() tries again
+  }, 20);
+}
+const DEG = Math.PI / 180;
+/** Share of its speed along the line of centres a drink keeps off the bowl (negative: it comes back). */
+const BOWL_MASS = roundMass(0.0035, BOWL_R) / DRINK_MASS;
+const BOUNCE_BACK = (1 - 0.9 * BOWL_MASS) / (1 + BOWL_MASS);
 
 function railsFor(rng: Rng, t: Tier): RailSeg[] {
   const top = COUNTER.y, bottom = COUNTER.y + COUNTER.h;
@@ -175,7 +217,9 @@ export function candidate(date: string, attempt: number): Level {
   const pete = npcs.find((n) => n.id === 'pete');
   if (pete && rng.chance(0.8)) {
     const b = place(rng, taken, 20, () => ({ x: pete.side === 'left' ? rng.range(152, 160) : rng.range(230, 238), y: pete.y + rng.range(-10, 10) }));
-    const w = b && place(rng, taken, 13, () => ({ x: rng.range(178, 214), y: Math.min(470, b.y + rng.range(90, 140)) }));
+    // A cut-shot spot if the layout has one; otherwise the old spot below Pete's, where the
+    // combo usually needs a bank. Either way the calendar proves a combo before release.
+    const w = b && (placeBowl(rng, taken, b, orders) ?? place(rng, taken, 13, () => ({ x: rng.range(178, 214), y: Math.min(470, b.y + rng.range(90, 140)) })));
     if (b && w) { bonus = { x: b.x, y: b.y, r: 18 }; bowl = { x: w.x, y: w.y }; }
   }
 
@@ -226,6 +270,8 @@ export function structureProblems(level: Level): string[] {
   }
   if (level.orders.length === 0) problems.push('no orders');
   if (level.pours < level.orders.length) problems.push('fewer pours than orders');
+  // The bowl must start well clear of Pete's spot, or it counts as delivered before any pour.
+  if (level.bowl && level.bonus && Math.hypot(level.bowl.x - level.bonus.x, level.bowl.y - level.bonus.y) < level.bonus.r + 22) problems.push("peanut bowl starts in Pete's spot");
   if (!level.props.some((p) => p.kind === 'hat')) problems.push('no sheriff hat');
   for (let i = 0; i < level.npcs.length; i++) {
     for (let j = i + 1; j < level.npcs.length; j++) {
@@ -254,7 +300,7 @@ export interface DailyOptions {
 /** The night for a date. Always returns a map that has been proven possible. */
 export function dailyLevel(date: string, opts: DailyOptions = {}): Daily {
   const maxAttempts = opts.maxAttempts ?? 20;
-  const validate = opts.validate ?? ((l: Level) => findSolution(l, { robustNeeded: 2, maxSimsPerOrder: 2500 }));
+  const validate = opts.validate ?? ((l: Level) => { const s = findSolution(l, { robustNeeded: 2, maxSimsPerOrder: 2500 }); return s && hasCombos(l, s.shots) ? s : null; });
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const level = candidate(date, attempt);
     if (structureProblems(level).length) continue;
