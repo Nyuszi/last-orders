@@ -3,7 +3,7 @@
 // every pixel stays square. Text is drawn on top at full resolution in a pixel font.
 import type { Drink, Level, NpcId, Side } from './levels';
 import { NPCS } from './levels';
-import { BOWL_R, GLASS_R, POUR_R, PROP_R, type Sim, type SimEvent } from './sim';
+import { BOWL_R, GLASS_R, POUR_R, PROP_R, pointInPoly, type Sim, type SimEvent } from './sim';
 import {
   ACE, BOWL, BOWL_PAL, CARDS, GLASS, GLASS_BEER, GLASS_TIPPED, HAT, HAT_PAL, ITEM_PAL, NPC_PAL, NPC_SPRITES,
   PETE_DROP, PETE_LEAN, PETE_SLIP, TAP, TAP_PAL, TIPJAR, glassPal, rotateCCW, rotateCW, type SpriteMap,
@@ -54,10 +54,10 @@ const PAL = {
   glass: '#dfeaea', glassShade: '#a9bcbc', shadow: '#00000055', skin: '#e2b48c',
 };
 const DRINK: Record<Drink, string> = { beer: '#e8b24a', rye: '#b5652c', whiskey: '#c77b2e', sarsaparilla: '#5a2c17', water: '#bfe0ea' };
-const PUDDLE: Record<Drink, { base: string; hi: string }> = {
-  beer: { base: '#b98a3e', hi: '#f0d48a' }, rye: { base: '#9a5a2e', hi: '#d39058' },
-  whiskey: { base: '#b07a3a', hi: '#f2cf86' }, sarsaparilla: { base: '#40200f', hi: '#7a4a30' },
-  water: { base: '#8fa6a3', hi: '#d6ecef' },
+const PUDDLE: Record<Drink, { base: string; hi: string; rim: string; spec: string }> = {
+  beer: { base: '#b98a3e', hi: '#f0d48a', rim: '#7a5520', spec: '#fff6d8' }, rye: { base: '#9a5a2e', hi: '#d39058', rim: '#5e3317', spec: '#f6d2a8' },
+  whiskey: { base: '#b07a3a', hi: '#f2cf86', rim: '#6e4a1e', spec: '#fff2cf' }, sarsaparilla: { base: '#40200f', hi: '#a8724c', rim: '#1f0f07', spec: '#e8c39a' },
+  water: { base: '#8fa6a3', hi: '#e2f3f5', rim: '#5d7472', spec: '#ffffff' },
 };
 
 // ---------- "smoothed and shaded" customers ----------
@@ -282,6 +282,8 @@ export class Renderer {
 
   reset() {
     this.particles = [];
+    this.ripples = [];
+    this.inPuddle.clear();
     this.bubbles = [];
     this.floats = [];
     this.moods.clear();
@@ -437,6 +439,33 @@ export class Renderer {
     }
   }
 
+  /**
+   * The aiming line's dotted path, showing what puddles will do before you pour: over a slippery
+   * puddle the dots spread out (the drink speeds through), over a sticky one they bunch up (it
+   * drags), in the puddle's own highlight colour. Elsewhere it's the usual cream dots, every 3 px.
+   */
+  private guideLine(sim: Sim, x0: number, y0: number, x1: number, y1: number, phase: number) {
+    x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
+    const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy, acc = phase % 3;
+    for (;;) {
+      let pd: Sim['puddles'][number] | null = null;
+      for (let i = sim.puddles.length - 1; i >= 0; i--) if (pointInPoly((x0 + 0.5) / S, (y0 + 0.5) / S, sim.puddles[i].poly)) { pd = sim.puddles[i]; break; }
+      const sticky = pd?.drink === 'sarsaparilla';
+      // Slippery: long gaps with short streaks (the drink speeds through). Sticky: a solid line (it drags).
+      const n = acc++;
+      if (!pd ? n % 3 === 0 : sticky ? true : n % 8 < 2) {
+        this.g.fillStyle = !pd ? PAL.cream : sticky ? PUDDLE.sarsaparilla.spec : PUDDLE[pd.drink].spec;
+        this.g.fillRect(x0, y0, 1, 1);
+      }
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+  }
+
   private line(x0: number, y0: number, x1: number, y1: number, col: string, every = 1, phase = 0) {
     x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
     const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
@@ -487,6 +516,7 @@ export class Renderer {
     this.g.setTransform(1, 0, 0, 1, 0, 0);
     this.drawFloor(L);
     this.drawCounter(L);
+    this.puddleEffects(sim);
     this.drawPuddles(sim);
     if (L.bonus) this.drawBonus(L.bonus, sim.badges.has('Peanuts for Pete'));
     this.drawOrders(sim);
@@ -688,19 +718,118 @@ export class Renderer {
     }
   }
 
+  /**
+   * Puddles look wet and show what they do: a darker rim, a shine along the top-left edge and the
+   * wood faintly showing through. Slippery ones (beer, rye, whiskey, water) get bright streaks
+   * sliding across; sticky sarsaparilla is thick and glossy with slow bubbles. Ripples from glasses
+   * crossing them are drawn here too.
+   */
   private drawPuddles(sim: Sim) {
-    const shift = Math.floor(this.frame / 5);
     for (const p of sim.puddles) {
       const age = sim.tick - p.born;
       const grow = p.born < 0 ? 1 : Math.min(1, 0.3 + age / 18);
       const pts = p.poly.map((q) => ({ x: (p.cx + (q.x - p.cx) * grow) * S, y: (p.cy + (q.y - p.cy) * grow) * S }));
       const col = PUDDLE[p.drink];
       const sticky = p.drink === 'sarsaparilla';
-      this.poly(pts, col.base, (x, y) => {
-        if (sticky) return (x * 7 + y * 13) % 23 === 0 ? col.hi : null;
-        return (x + y + shift) % 11 === 0 && y % 2 === 0 ? col.hi : null;
-      });
+      // Rasterise the outline into a mask, so edges can be found.
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const q of pts) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
+      x0 = Math.floor(x0); y0 = Math.floor(y0); x1 = Math.ceil(x1); y1 = Math.ceil(y1);
+      const w = x1 - x0 + 1, h = y1 - y0 + 1;
+      const mask = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) {
+        const yc = y0 + y + 0.5;
+        const xs: number[] = [];
+        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+          const a = pts[i], b = pts[j];
+          if ((a.y > yc) !== (b.y > yc)) xs.push(a.x + ((yc - a.y) / (b.y - a.y)) * (b.x - a.x));
+        }
+        xs.sort((a, b) => a - b);
+        for (let k = 0; k + 1 < xs.length; k += 2) for (let x = Math.round(xs[k]); x < Math.round(xs[k + 1]); x++) if (x >= x0 && x <= x1) mask[y * w + (x - x0)] = 1;
+      }
+      const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && mask[y * w + x] === 1;
+      const g = this.g;
+      const seed = Math.round(p.cx * 7 + p.cy * 13);
+      const mx = p.cx * S - x0, my = p.cy * S - y0; // centre in mask pixels
+      // Sticky puddles: pick this moment's bubble spot (well inside, away from the shine).
+      let bubble: { x: number; y: number; t: number } | null = null;
+      if (sticky) {
+        const spots: [number, number][] = [];
+        for (let y = 3; y < h - 3; y += 3) for (let x = 3; x < w - 3; x += 3) if (inside(x - 3, y) && inside(x + 3, y) && inside(x, y - 3) && inside(x, y + 3) && x - mx + (y - my) * 1.2 > -2) spots.push([x, y]);
+        const cycle = Math.floor((this.frame + seed) / 70), t = (this.frame + seed) % 70;
+        if (spots.length && t < 45) { const [bx, by] = spots[(cycle * 7 + seed) % spots.length]; bubble = { x: bx, y: by, t }; }
+      }
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (!inside(x, y)) continue;
+        const edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+        // The edge catches the light along the upper-left: a 2 px shine band just inside the rim.
+        const band = !inside(x - 3, y) || !inside(x, y - 3) || !inside(x - 2, y - 2);
+        const upperLeft = x - mx + (y - my) * 1.2 < -2;
+        let c: string, a = 1;
+        if (edge) c = col.rim;
+        else if (band && upperLeft) c = col.hi;
+        else { c = col.base; a = sticky ? 0.96 : 0.8; } // thin liquid: the wood shows faintly through
+        if (!edge && !(band && upperLeft)) {
+          if (sticky) {
+            // One slow bubble at a time, in a different spot each time: a dot that swells into a ring, then pops.
+            if (bubble) {
+              const dx = x - bubble.x, dy = y - bubble.y, r = bubble.t < 15 ? 0 : 1;
+              if (Math.max(Math.abs(dx), Math.abs(dy)) === r) { c = bubble.t > 38 ? col.rim : col.hi; a = 1; }
+            }
+            // A glossy spot near the top-left, like the top of a thick syrup.
+            if (Math.abs(x - (mx - w * 0.18)) + Math.abs(y - (my - h * 0.2)) <= 1) { c = col.spec; a = 1; }
+          } else {
+            // Bright streaks sliding across the surface, like light on something slick.
+            const s = ((x - y * 2 + Math.floor(this.frame / 3) + seed) % 19 + 19) % 19;
+            if (s < 2 && y % 3 !== 2) { c = s === 0 ? col.spec : col.hi; a = 1; }
+          }
+        }
+        g.globalAlpha = a;
+        g.fillStyle = c;
+        g.fillRect(x0 + x, y0 + y, 1, 1);
+      }
+      g.globalAlpha = 1;
     }
+    // Ripples where a glass entered a puddle.
+    this.ripples = this.ripples.filter((r) => this.frame - r.t < 18);
+    for (const r of this.ripples) {
+      const k = (this.frame - r.t) / 18;
+      this.ring(P(r.x), P(r.y), 2 + Math.round(k * 7), r.color, 1);
+    }
+  }
+
+  /** Splash, ripple and trail when a glass is in a puddle (looks only; the physics is in the sim). */
+  private ripples: { x: number; y: number; t: number; color: string }[] = [];
+  private inPuddle = new Map<number, string | null>();
+  private puddleEffects(sim: Sim) {
+    const seen = new Set<number>();
+    for (const gl of sim.glasses) {
+      const b = gl.body;
+      if (!b || gl.tipped) continue;
+      seen.add(b.id);
+      let pd: Sim['puddles'][number] | null = null;
+      for (let i = sim.puddles.length - 1; i >= 0; i--) if (pointInPoly(b.position.x, b.position.y, sim.puddles[i].poly)) { pd = sim.puddles[i]; break; }
+      const was = this.inPuddle.get(b.id) ?? null;
+      const now = pd ? pd.drink : null;
+      this.inPuddle.set(b.id, now);
+      if (!pd || b.speed < 0.15) continue;
+      const col = PUDDLE[pd.drink];
+      const sticky = pd.drink === 'sarsaparilla';
+      if (was !== now) {
+        // Entering: a splash of droplets and a ripple.
+        this.ripples.push({ x: b.position.x, y: b.position.y, t: this.frame, color: col.hi });
+        this.burst(b.position.x, b.position.y, sticky ? col.rim : col.hi, sticky ? 6 : 10, sticky ? 0.8 : 1.8);
+      }
+      const ux = b.velocity.x / b.speed, uy = b.velocity.y / b.speed;
+      if (sticky) {
+        // A dark smear left behind, and the odd blob pulling off the glass.
+        if (this.frame % 2 === 0) this.particles.push({ x: b.position.x - ux * 7, y: b.position.y - uy * 7, vx: 0, vy: 0, life: 0, max: 50, color: col.rim });
+      } else if (this.frame % 2 === 0) {
+        // Speed streaks trailing the glass.
+        for (const side of [-1, 1]) this.particles.push({ x: b.position.x - ux * 9 + uy * side * 4, y: b.position.y - uy * 9 - ux * side * 4, vx: -ux * 0.6, vy: -uy * 0.6, life: 0, max: 10, color: col.hi });
+      }
+    }
+    for (const id of [...this.inPuddle.keys()]) if (!seen.has(id)) this.inPuddle.delete(id);
   }
 
   private drawBonus(b: { x: number; y: number; r: number }, done: boolean) {
@@ -1025,7 +1154,7 @@ export class Renderer {
     }
     const phase = Math.floor(this.frame / 3);
     const sx = P(L.start.x), sy = P(L.start.y), ex = P(x), ey = P(y);
-    this.line(sx, sy, ex, ey, PAL.cream, 3, phase);
+    this.guideLine(sim, sx, sy, ex, ey, phase);
     const ghost = (gx: number, gy: number, col: string) => this.ring(gx, gy, 5, col, 1);
     if (end.kind === 'rail') {
       ghost(ex, ey, PAL.cream);

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Puddle demo</title>
+<style>
+  body { margin: 0; background: #1d110b; color: #f3e6cc; font: 14px monospace; display: flex; gap: 16px; padding: 12px; }
+  canvas { image-rendering: pixelated; }
+  button { background: #d9a441; border: 2px solid #1a0f0a; font: 700 13px monospace; padding: 6px 12px; cursor: pointer; }
+</style></head>
+<body>
+<canvas id="game"></canvas>
+<div><p>A puddle of each kind in a column (bottom to top): beer, whiskey, water, sarsaparilla.<br>A glass is poured straight up through them.</p><button id="go">Pour again</button></div>
+<script type="module">
+// Test bench for how puddles look and react: the real Sim and Renderer, a bare bar with only puddles.
+import { Sim } from '/src/sim.ts';
+import { Renderer } from '/src/render.ts';
+import { LEVELS } from '/src/levels.ts';
+
+const base = LEVELS[1];
+const level = {
+  ...base,
+  npcs: [], props: [], posts: [], glasses: [], bowl: undefined, bonus: undefined, arm: undefined,
+  orders: [{ owner: 'sheriff', drink: 'whiskey', x: 195, y: 70, r: 19 }],
+  puddles: [
+    { drink: 'beer', x: 195, y: 470, r: 26 },
+    { drink: 'whiskey', x: 195, y: 380, r: 26 },
+    { drink: 'water', x: 195, y: 290, r: 26 },
+    { drink: 'sarsaparilla', x: 195, y: 200, r: 26 },
+  ],
+};
+const canvas = document.getElementById('game');
+const renderer = new Renderer(canvas);
+for (const n of ['beer', 'whiskey', 'rye', 'water', 'sarsaparilla', 'tipped']) renderer.setItemImage(n, `/src/assets/sprites/item-${n}.png`);
+renderer.resize(390 * 1.5, 600 * 1.5);
+let sim;
+function pour(power) {
+  sim = new Sim(structuredClone(level));
+  renderer.reset();
+  window.sim = sim;
+  setTimeout(() => { window.fired = sim.fire(-Math.PI / 2, power, 0); }, 600);
+}
+document.getElementById('go').onclick = () => pour(0.42);
+window.pour = pour;
+pour(0.42);
+(function frame() {
+  sim.step();
+  for (const ev of sim.events) renderer.handle(ev, sim);
+  sim.events = [];
+  renderer.draw(sim, sim.status === 'aiming' ? { angle: window.aimAngle ?? -Math.PI / 2, power: 0 } : null, false, 0);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body></html>
