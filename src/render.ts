@@ -36,6 +36,9 @@ const TIPPED = { right: GLASS_TIPPED, down: rotateCW(GLASS_TIPPED), left: rotate
 export const W = 390;
 export const H = 600;
 const S = 0.5; // world units -> buffer pixels
+/** The glasses' fine layer is FINE× the buffer; each glass art pixel is GLASS_PX fine pixels (2/3 of a game pixel). */
+const FINE = 6;
+const GLASS_PX = 4;
 export const PW = W * S;
 export const PH = H * S;
 const FONT = '"Silkscreen", "Pixelify Sans", monospace';
@@ -231,7 +234,38 @@ export class Renderer {
     this.buf = document.createElement('canvas');
     this.buf.width = PW;
     this.buf.height = PH;
-    this.g = this.buf.getContext('2d')!;
+    this.g = this.gBase = this.buf.getContext('2d')!;
+    this.bufTop = document.createElement('canvas');
+    this.bufTop.width = PW;
+    this.bufTop.height = PH;
+    this.gTop = this.bufTop.getContext('2d')!;
+    this.fine = [0, 1].map(() => {
+      const c = document.createElement('canvas');
+      c.width = PW * FINE;
+      c.height = PH * FINE;
+      c.getContext('2d')!.imageSmoothingEnabled = false;
+      return c;
+    });
+  }
+
+  /** Buffers: the bar and everything under the glasses, and a transparent one for everything above them. */
+  private gBase: CanvasRenderingContext2D;
+  private bufTop: HTMLCanvasElement;
+  private gTop: CanvasRenderingContext2D;
+  /** Finer layers (FINE× the buffer) for the glasses: [0] on the bar, [1] the drink in your hand on top. */
+  private fine: HTMLCanvasElement[];
+
+  /**
+   * Draws a glass on a fine layer with its pixels 2/3 of a game pixel, so the hand-drawn ~14 px
+   * glasses come out about 9–10 game pixels across, the size of their hit circle.
+   */
+  private drawFine(art: { img: HTMLImageElement | HTMLCanvasElement; shadow: HTMLCanvasElement }, wx: number, wy: number, layer: 0 | 1) {
+    const g = this.fine[layer].getContext('2d')!;
+    g.imageSmoothingEnabled = false;
+    const w = art.img.width * GLASS_PX, h = art.img.height * GLASS_PX;
+    const x0 = Math.round(wx * S * FINE - w / 2), y0 = Math.round(wy * S * FINE - h / 2);
+    g.drawImage(art.shadow, x0 + GLASS_PX, y0 + GLASS_PX, w, h);
+    g.drawImage(art.img, x0, y0, w, h);
   }
 
   resize(cssW: number, cssH: number) {
@@ -449,6 +483,7 @@ export class Renderer {
   draw(sim: Sim, aim: Aim | null, replay: false | 'REPLAY' | 'SOLUTION', slowArrow = 0) {
     const L = sim.level;
     this.frame++;
+    this.g = this.gBase;
     this.g.setTransform(1, 0, 0, 1, 0, 0);
     this.drawFloor(L);
     this.drawCounter(L);
@@ -456,7 +491,12 @@ export class Renderer {
     if (L.bonus) this.drawBonus(L.bonus, sim.badges.has('Peanuts for Pete'));
     this.drawOrders(sim);
     for (const p of L.posts) this.drawPost(p.x, p.y, p.r, p.kind);
+    // Glasses go on their own finer layer (see drawFine); everything after them is drawn on a
+    // transparent top buffer so it still covers the glasses.
     this.drawGlasses(sim);
+    this.g = this.gTop;
+    this.g.setTransform(1, 0, 0, 1, 0, 0);
+    this.g.clearRect(0, 0, PW, PH);
     this.drawProps(sim);
     if (sim.bowl) this.drawBowl(sim.bowl.position.x, sim.bowl.position.y);
     this.drawDebris();
@@ -486,7 +526,11 @@ export class Renderer {
     if (this.shake > 0) { sx = (this.shake % 2 ? 1 : -1) * this.k; this.shake--; }
     ctx.fillStyle = PAL.floor;
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    // Bar, then the glasses, then everything above them, then the drink in your hand.
     ctx.drawImage(this.buf, sx, 0, this.canvas.width, this.canvas.height);
+    for (const layer of [this.fine[0], this.bufTop, this.fine[1]]) ctx.drawImage(layer, sx, 0, this.canvas.width, this.canvas.height);
+    for (const f of this.fine) f.getContext('2d')!.clearRect(0, 0, f.width, f.height);
+    this.g = this.gBase;
     this.drawOverlay(sim, replay);
   }
 
@@ -749,17 +793,19 @@ export class Renderer {
     return art;
   }
 
-  private drawGlass(wx: number, wy: number, drink: Drink) {
+  /** A glass at a world position: the hand-drawn art on the fine layer, or the old map. Layer 1 = above everything. */
+  private drawGlass(wx: number, wy: number, drink: Drink, layer: 0 | 1 = 0) {
     const art = this.itemImgs.get(drink);
-    if (art) { this.drawItem(art, P(wx), P(wy)); return; }
+    if (art) { this.drawFine(art, wx, wy, layer); return; }
     const map = drink === 'beer' ? GLASS_BEER : GLASS;
     const pal = glassPal(drink);
     this.sprite(map, pal, P(wx) + 1, P(wy) + 1, PAL.shadow);
     this.sprite(map, pal, P(wx), P(wy));
   }
 
+  /** The drink in the bartender's hand: drawn on top, over the hand and the aiming guide. */
   private drawPour(wx: number, wy: number, drink: Drink) {
-    this.drawGlass(wx, wy, drink);
+    this.drawGlass(wx, wy, drink, 1);
   }
 
   private drawGlasses(sim: Sim) {
@@ -769,7 +815,7 @@ export class Renderer {
         const ca = Math.cos(gl.tipAngle), sa = Math.sin(gl.tipAngle);
         const dir = Math.abs(ca) > Math.abs(sa) ? (ca > 0 ? 'right' : 'left') : sa > 0 ? 'down' : 'up';
         const art = this.tippedArt(gl.drink, dir);
-        if (art) this.drawItem(art, P(gl.tipX), P(gl.tipY));
+        if (art) this.drawFine(art, gl.tipX, gl.tipY, 0);
         else this.sprite(TIPPED[dir], glassPal(gl.drink), P(gl.tipX), P(gl.tipY));
         continue;
       }
