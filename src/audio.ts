@@ -176,7 +176,34 @@ export function buzz(pattern: number | number[]) {
   const now = performance.now();
   if (typeof pattern === 'number' && now - lastBuzz < 60) return;
   lastBuzz = now;
+  humUntil = 0; // replaces any pull hum still playing
   try { navigator.vibrate(pattern); } catch { /* blocked here: nothing to do */ }
+}
+
+/**
+ * While the tap is pulled down: the weight of the pull. Phones can't vibrate softer or harder,
+ * only on and off, so strength is pulses: short buzzes with long gaps near the top (3 ms on,
+ * 45 off), longer and closer together as the pull deepens (25 on, 6 off at full). Called every
+ * frame; a new pattern is sent only as the last one runs out, so the feel follows the pull.
+ */
+let humUntil = 0;
+export function hum(level: number) {
+  if (!on.vib || !canVibrate || document.hidden) return;
+  const now = performance.now();
+  if (now < humUntil - 40) return;
+  const l = Math.max(0, Math.min(1, level));
+  const onMs = Math.round(3 + l * 22), offMs = Math.round(Math.max(6, 45 - l * 39));
+  const pattern: number[] = [];
+  let t = 0;
+  while (t < 140) { pattern.push(onMs, offMs); t += onMs + offMs; }
+  humUntil = now + t;
+  try { navigator.vibrate(pattern); } catch { /* blocked here */ }
+}
+/** The pull let go or cancelled: stop the hum. */
+export function stopHum() {
+  if (!humUntil) return;
+  humUntil = 0;
+  try { navigator.vibrate(0); } catch { /* blocked here */ }
 }
 
 // ---------------- Music ----------------

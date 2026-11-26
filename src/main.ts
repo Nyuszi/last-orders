@@ -4,7 +4,7 @@ import { SERVE_REACH, Sim, STEP_MS, pointInPoly, type Shot, type SimEvent, type 
 import { SOLUTIONS } from './solutions';
 import { fetchNight, requestedDate } from './daily';
 import { detectReddit, journey, onReddit, reportResult, shareResult } from './reddit';
-import { buzz, sfx, mountSoundPanel, type SfxId } from './audio';// Every portrait in assets/portraits is picked up automatically, keyed by its file name
+import { buzz, hum, stopHum, sfx, mountSoundPanel, type SfxId } from './audio';// Every portrait in assets/portraits is picked up automatically, keyed by its file name
 // ("<customer>-<mood>.webp"), so new art only has to be dropped into the folder.
 const PORTRAIT_FILES = import.meta.glob<string>('./assets/portraits/*.webp', { eager: true, query: '?inline', import: 'default' });
 // The beer tap's sprites (tower head, column strip, drip tray, knob), inlined like the portraits.
@@ -950,6 +950,7 @@ function clampAngle(a: number) {
 function canShoot() { return mode === 'play' && sim.status === 'aiming' && sim.poursLeft > 0 && !introOpen; }
 function cancelCharge() {
   charging = null; charge = 0;
+  stopHum();
   tapEl.classList.remove('grab');
   showPower(0, true);
 }
@@ -994,6 +995,8 @@ window.addEventListener('keyup', (e) => {
 function updatePoolControls(dt: number, now: number) {
   if (turning) { aimAngle = clampAngle(aimAngle + turning * TURN_SPEED * (fine ? 0.25 : 1) * (dt / 1000)); aimTick(); }
   if (charging?.by === 'space') { charge = Math.min(1, (now - charging.started) / CHARGE_MS); pullTick(); showPower(charge, false); }
+  // Feel the weight of the pull: the phone hums harder the further the tap is down.
+  if (charging && charge > 0.02) hum(charge); else if (charging) stopHum();
   // The guideline is always up while you can pour; the bartender's hand pulls back with the tap.
   if (!lesson) aim = canShoot() ? { angle: aimAngle, power: charging ? charge : 0, spin } : null;
 }
